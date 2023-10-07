@@ -197,6 +197,7 @@ tid_t thread_create(const char *name, int priority,
 {
 	struct thread *t;
 	tid_t tid;
+	struct thread *parent = thread_current();
 	//function 인자는 thread가 생성되고 이 스레드가 시작할때 실행할 함수이다.
 	ASSERT(function != NULL); //유효한 함수 포인터를 가리키고 있어야 한다
 
@@ -221,7 +222,9 @@ tid_t thread_create(const char *name, int priority,
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
 	//부모 프로세스를 현재 생성된 프로세스의 구조체에 저장해준다
-
+	//부모 프로세스는 현재 러닝중인 스레드인가?? -> 맞다!
+	list_push_back(&parent -> child_list, &t->c_elem);
+	t->parent_p = parent;
 	/* Add to run queue. */
 	thread_unblock(t); // ready queue에 넣어준다.
 

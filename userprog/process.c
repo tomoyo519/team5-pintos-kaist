@@ -60,6 +60,7 @@ tid_t process_create_initd(const char *file_name)
 
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create(file_name, PRI_DEFAULT, initd, fn_copy);
+	//부모 프로세스의 정보를 알아야됨....어떻게 알지????
 	if (tid == TID_ERROR)
 		palloc_free_page(fn_copy);
 	return tid;
@@ -200,6 +201,7 @@ __do_fork(void *aux)
 	if (succ)
 	{	
 		list_push_back(&parent->child_list, &current->c_elem);
+		current -> parent_p = parent;
 		if_.R.rax = 0;
 		memcpy(&current->tf, &if_, sizeof(struct intr_frame));
 		// current->tf = if_;
