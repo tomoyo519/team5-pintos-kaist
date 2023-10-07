@@ -107,7 +107,8 @@ struct thread {
 	int create_flag;					//성공적으로 자식 프로세스를 생성시켰는지 확인하는 플래그
 	int exit_status;					//프로그램의 종료 상태를 나타내는 멤버
 	struct thread *parent_p;			//부모 프로세스 디스크립터 포인터 필드
-	struct file *fdt[128];				//file 정보 file -> inode. open_cnt
+	struct file **file_dt; 				//파일 디스크립터 테이블
+	int fdidx; 							//해당 파일에 대한 인덱스 값을 넣기 위한 용도
 	int next_fd;						//다음 파일 디스크립터 정보(number) 1씩 증가
 	struct semaphore fork_sema;
     struct intr_frame tf_for_syscall;
