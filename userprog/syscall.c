@@ -62,7 +62,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		break;
 	case SYS_FORK:      
 		// struct thread* curr_t = thread_current();
-		f->R.rax = process_fork(f->R.rdi, &curr_t->tf);
+		f->R.rax = process_fork(f->R.rdi, f);
 		break;
 	case SYS_EXEC:      
 		// exec();

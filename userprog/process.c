@@ -83,12 +83,22 @@ initd(void *f_name)
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
 // 인자로 들어오는 if: 부모 프로세스의 if
+struct intr_frame prt_if;
+struct semaphore fork_wait;
+
 tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 {
+	memcpy(&prt_if, if_, sizeof(struct intr_frame));
+	// prt_if = if_;
 	/* Clone current thread to new thread.*/
 	// _do_fork의 인자로 현재 부모 프로세스(쓰레드)가 들어감
-	return thread_create(name,
-						 PRI_DEFAULT, __do_fork, thread_current());
+	sema_init(&fork_wait, 0);
+	tid_t pid = thread_create(name, PRI_DEFAULT, __do_fork, thread_current());
+
+	// block 					 
+	sema_down(&fork_wait);
+	
+	return pid;
 }
 
 #ifndef VM
@@ -107,10 +117,11 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
 	// is_kern_addr 매크로로 확인 가능
 	if (is_kernel_vaddr(va)) {
-		return;
+		return true;
 	}
 
 	/* 2. Resolve VA from the parent's page map level 4. */
+	// 가상주소
 	parent_page = pml4_get_page(parent->pml4, va); // 부모의 페이지 주소 얻어옴
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
@@ -120,6 +131,7 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
 	memcpy(newpage, parent_page, PGSIZE);
+
 	if (is_writable(pte)) {
 		writable = true;
 	} else {
@@ -148,7 +160,8 @@ __do_fork(void *aux)
 	struct thread *parent = (struct thread *)aux;
 	struct thread *current = thread_current(); // 생성될 자식 프로세스
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-	struct intr_frame *parent_if = &parent->tf;
+	// struct intr_frame *parent_if = &parent->tf;
+	struct intr_frame *parent_if = &prt_if;
 	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
@@ -182,10 +195,13 @@ __do_fork(void *aux)
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
-		// current->tf = if_;
-		// current->tf.R.rax = 0;
+	{
 		if_.R.rax = 0;
-		do_iret(&if_);
+		memcpy(&current->tf, &if_, sizeof(struct intr_frame));
+		// current->tf = if_;
+		sema_up(&fork_wait);
+		do_iret(&current->tf);
+	}
 error:
 	thread_exit();
 }
@@ -297,15 +313,15 @@ int process_wait(tid_t child_tid UNUSED)
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
 	// return -1;
-	// for (int i = 0; i < 100000000; i++) {
-	// 	;
-	// }
+	for (int i = 0; i < 100000000; i++) {
+		;
+	}
 	// int exit_status;
 	// wait(child_tid); // 여기서 멈춰야 함.
 	// printf("child_tid: %d\n", child_tid);
-	while (1) {
-		;
-	}
+	// while (1) {
+	// 	;
+	// }
 	return -1;
 }
 
