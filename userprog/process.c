@@ -95,9 +95,9 @@ tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 	sema_init(&fork_wait, 0);
 	tid_t pid = thread_create(name, PRI_DEFAULT, __do_fork, thread_current());
 
-	// block 					 
+	// block
 	sema_down(&fork_wait);
-	
+
 	return pid;
 }
 
@@ -116,7 +116,8 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
 	// is_kern_addr 매크로로 확인 가능
-	if (is_kernel_vaddr(va)) {
+	if (is_kernel_vaddr(va))
+	{
 		return true;
 	}
 
@@ -197,7 +198,8 @@ __do_fork(void *aux)
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
-	{
+	{	
+		list_push_back(&parent->child_list, &current->c_elem);
 		if_.R.rax = 0;
 		memcpy(&current->tf, &if_, sizeof(struct intr_frame));
 		// current->tf = if_;
@@ -315,42 +317,51 @@ int process_wait(tid_t child_tid UNUSED)
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	struct thread *cur = thread_current();				//아마도 부모 프로세스
-	struct thread *e;
-	//일단 자식 프로세스의 exit_status가져오자 -> if문 안에서 하면 될듯?
-	//일단 for문으로 쭉 돌면서 찾기
-	for(e = list_begin(&cur->child_list);e!=list_end(&cur->child_list);e=list_next(e)){
-		
+	struct thread *cur = thread_current(); // 아마도 부모 프로세스
+	struct list_elem *e;
+	struct thread *t;
+	// 일단 자식 프로세스의 exit_status가져오자 -> if문 안에서 하면 될듯?
+	// 일단 for문으로 쭉 돌면서 찾기
+	ASSERT(!list_empty(&cur->child_list));
+	for (e = list_begin(&cur->child_list); e != list_end(&cur->child_list); e = list_next(e))
+	{
+		t = list_entry(e, struct thread, c_elem);
+		if (t->tid == child_tid)
+		{
+			break;
+		}
 	}
-	//그 전에 
-	//child_tid ==  자식 프로세스의 pid(struct thread 의 pid참고)
-	// 1.자식 프로세스가 종료될때까지 부모 프로세스는 대기
-	//자식 프로세스의 exit_status를 가져와서 종료상태를 반환받을때까지 부모 프로세스는 대기 상태 진입 -> sema_down
-	//->waitlist에 추가됨
-	//자식 프로세스가 종료되면 sema_up해줌->부모 프로세스 readylist에 추가됨 -> 마지막에 sema_up?
-	while(child_tid != 0){
-		// 5.호출한 프로세스의 자식이 아니라면
-		//부모 프로세스의 child_list를 탐색해서 현재 child_tid와 같은 프로세스가 없다면, 호출한 프로세스의 자식이 아님
-		//for문으로 탐색하고, 만약 list_tail까지 왔다면 호출한 프로세스의 자식이 아니니까 return -1
-		// 2.종료 상태를 반환한다
-		if(&cur->child_list)
-	}
+	// 그 전에
+	// child_tid ==  자식 프로세스의 pid(struct thread 의 pid참고)
 
-	
+	// 자식 프로세스가 종료되면 sema_up해줌->부모 프로세스 readylist에 추가됨 -> 마지막에 sema_up? -> 이건 process_exit에서 해줌
+	while (t->exit_status == INIT_EXIT_STATUS)
+	{
+		// 1.자식 프로세스가 종료될때까지 부모 프로세스는 대기
+		// 자식 프로세스의 exit_status를 가져와서 종료상태를 반환받을때까지 부모 프로세스는 대기 상태 진입 -> sema_down
+		//->waitlist에 추가됨
+		sema_down(&cur->wait_process_sema);
+		// 5.호출한 프로세스의 자식이 아니라면
+		// 부모 프로세스의 child_list를 탐색해서 현재 child_tid와 같은 프로세스가 없다면, 호출한 프로세스의 자식이 아님
+		// for문으로 탐색하고, 만약 list_tail까지 왔다면 호출한 프로세스의 자식이 아니니까 return -1
+		// 2.종료 상태를 반환한다
+	}
+	return t->exit_status;
+
 	// 자식 프로세스가 정상적으로 종료시(exit_status == 0이면 프로세스 디스크립터를 제거(이게 무슨 말이지?))
-	//exit_status값 리턴, 
-	//비 정상적으로 종료(kill()일 경우 -1리턴 -> kill()이 실행되었을때 무엇을 리턴하는지 확인하기)
+	// exit_status값 리턴,
+	// 비 정상적으로 종료(kill()일 경우 -1리턴 -> kill()이 실행되었을때 무엇을 리턴하는지 확인하기)
 }
 
 /* Exit the process. This function is called by thread_exit (). */
 void process_exit(void)
 {
-	struct thread *curr = thread_current();
+	struct thread *curr = thread_current(); // 종료 전이니까 자식 프로세스임
 	/* TODO: Your code goes here.
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-
+	sema_up(&curr->wait_process_sema);
 	process_cleanup();
 }
 

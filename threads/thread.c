@@ -25,6 +25,7 @@
    Do not modify this value. */
 #define THREAD_BASIC 0xd42df210
 
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -611,14 +612,16 @@ init_thread(struct thread *t, const char *name, int priority)
 	list_init(&t->donations);
 	list_init(&t->lock_list);
 	list_init(&t->child_list);							//자식 프로세스 리스트 초기화
-	for(int i = 0;i<128;i++){
-		t->fdt[i] = NULL;
-	}
+	// for(int i = 0;i<128;i++){
+	// 	t->fdt[i] = NULL;
+	// }
 	t->status = THREAD_BLOCKED;						   // blocked 상태로(맨처음 상태가 blocked 상태)
 	strlcpy(t->name, name, sizeof t->name);			   // 인자로 받은 이름을 스레드 이름으로 하는것
 	t->tf.rsp = (uint64_t)t + PGSIZE - sizeof(void *); // 스택 포인터 설정
 	t->priority = priority;
 	t->magic = THREAD_MAGIC; // 스택 오버플로우 판단하는 변수
+	t->exit_status = INIT_EXIT_STATUS;
+	sema_init(&t->wait_process_sema, 0);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

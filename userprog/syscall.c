@@ -56,6 +56,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		// 유저: exit(EXIT_NUM, status) 호출
 		f->R.rax = f->R.rdi;
 		// 프로세스 디스크립터에 exit_status값 저장
+		//curr_t == child
 		curr_t->exit_status = f->R.rdi;
 		printf("%s: exit(%d)\n", curr_t->name, f->R.rdi);
 		thread_exit();
@@ -68,10 +69,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		// exec();
 		break;
 	case SYS_WAIT:
-		while (1)
-		{
-			;
-		}
+		f->R.rax = process_wait(f->R.rdi);
 		break;
 	case SYS_CREATE:
 		// create();
@@ -115,20 +113,4 @@ int write(int fd, const void *buffer, unsigned int size)
 		return size;
 	}
 	return -1;
-}
-/*TODO : 프로세스 디스크립터를 삭제하지 않도록 수정*/
-//prev가 뭐야
-//initial_thread가 뭐야
-void thread_schedule_tail(struct thread *prev)
-{
-	struct thread *cur = thread_current();
-	ASSERT(intr_get_level() == INTR_OFF);
-	/* Mark us as running. */
-	cur->status = THREAD_RUNNING;
-	if (prev != NULL && prev->status == THREAD_DYING &&
-			prev != initial_thread)
-	{
-		ASSERT(prev != cur);
-		palloc_free_page(prev); /* 프로세스 디스크립터 삭제 */
-	}
 }
