@@ -61,13 +61,18 @@ pdpe_walk (uint64_t *pdpe, const uint64_t va, int create) {
  * on CREATE.  If CREATE is true, then a new page table is
  * created and a pointer into it is returned.  Otherwise, a null
  * pointer is returned. */
+// 한 va(가상주소)에 대해 페이지 테이블 엔트리의 주소 반환
+// 
 uint64_t *
 pml4e_walk (uint64_t *pml4e, const uint64_t va, int create) {
 	uint64_t *pte = NULL;
-	int idx = PML4 (va);
+	int idx = PML4 (va); // pml4 offset에 해당하는 9bit 만큼 추출
 	int allocated = 0;
 	if (pml4e) {
+		// page directory pointer entry 구함
 		uint64_t *pdpe = (uint64_t *) pml4e[idx];
+
+		// pdpe가 존재하지 않을 때,
 		if (!((uint64_t) pdpe & PTE_P)) {
 			if (create) {
 				uint64_t *new_page = palloc_get_page (PAL_ZERO);
@@ -79,6 +84,7 @@ pml4e_walk (uint64_t *pml4e, const uint64_t va, int create) {
 			} else
 				return NULL;
 		}
+		// pml4e에 페이지 만들어 넣든 이미 있었으면 그냥 써서 
 		pte = pdpe_walk (ptov (PTE_ADDR (pml4e[idx])), va, create);
 	}
 	if (pte == NULL && allocated) {
@@ -100,6 +106,7 @@ pml4_create (void) {
 	return pml4;
 }
 
+// Page Table
 static bool
 pt_for_each (uint64_t *pt, pte_for_each_func *func, void *aux,
 		unsigned pml4_index, unsigned pdp_index, unsigned pdx_index) {
@@ -117,6 +124,7 @@ pt_for_each (uint64_t *pt, pte_for_each_func *func, void *aux,
 	return true;
 }
 
+// Page Directory Table
 static bool
 pgdir_for_each (uint64_t *pdp, pte_for_each_func *func, void *aux,
 		unsigned pml4_index, unsigned pdp_index) {
@@ -130,6 +138,7 @@ pgdir_for_each (uint64_t *pdp, pte_for_each_func *func, void *aux,
 	return true;
 }
 
+// Page Directory Point Table
 static bool
 pdp_for_each (uint64_t *pdp,
 		pte_for_each_func *func, void *aux, unsigned pml4_index) {
@@ -145,6 +154,7 @@ pdp_for_each (uint64_t *pdp,
 
 /* Apply FUNC to each available pte entries including kernel's. */
 bool
+// PML4 Table
 pml4_for_each (uint64_t *pml4, pte_for_each_func *func, void *aux) {
 	for (unsigned i = 0; i < PGSIZE / sizeof(uint64_t *); i++) {
 		uint64_t *pdpe = ptov((uint64_t *) pml4[i]);
@@ -215,9 +225,12 @@ void *
 pml4_get_page (uint64_t *pml4, const void *uaddr) {
 	ASSERT (is_user_vaddr (uaddr));
 
+	// user virtual address에 대응하는 physical address(페이지 테이블 엔트리) 반환 
 	uint64_t *pte = pml4e_walk (pml4, (uint64_t) uaddr, 0);
 
+	// 해당 페이지 가상주소
 	if (pte && (*pte & PTE_P))
+
 		return ptov (PTE_ADDR (*pte)) + pg_ofs (uaddr);
 	return NULL;
 }

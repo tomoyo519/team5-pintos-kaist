@@ -82,9 +82,11 @@ initd(void *f_name)
 
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
+// 인자로 들어오는 if: 부모 프로세스의 if
 tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 {
 	/* Clone current thread to new thread.*/
+	// _do_fork의 인자로 현재 부모 프로세스(쓰레드)가 들어감
 	return thread_create(name,
 						 PRI_DEFAULT, __do_fork, thread_current());
 }
@@ -92,32 +94,44 @@ tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 #ifndef VM
 /* Duplicate the parent's address space by passing this function to the
  * pml4_for_each. This is only for the project 2. */
+// 인자 = (페이지 테이블 엔트리, 가상 주소공간(유저 어드레스), 부모 프로세스)
 static bool
 duplicate_pte(uint64_t *pte, void *va, void *aux)
 {
-	struct thread *current = thread_current();
-	struct thread *parent = (struct thread *)aux;
+	struct thread *current = thread_current(); // 현재 쓰레드(프로세스) = 생성될 프로세스
+	struct thread *parent = (struct thread *)aux; // 부모 쓰레드(프로세스)
 	void *parent_page;
 	void *newpage;
 	bool writable;
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
+	// is_kern_addr 매크로로 확인 가능
+	if (is_kernel_vaddr(va)) {
+		return;
+	}
 
 	/* 2. Resolve VA from the parent's page map level 4. */
-	parent_page = pml4_get_page(parent->pml4, va);
+	parent_page = pml4_get_page(parent->pml4, va); // 부모의 페이지 주소 얻어옴
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
-
+	newpage = palloc_get_page(PAL_USER);
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
+	memcpy(newpage, parent_page, PGSIZE);
+	if (is_writable(pte)) {
+		writable = true;
+	} else {
+		writable = false;
+	}
 
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
 	if (!pml4_set_page(current->pml4, va, newpage, writable))
 	{
 		/* 6. TODO: if fail to insert page, do error handling. */
+		printf("failed: inserting page\n");
 	}
 	return true;
 }
@@ -130,11 +144,11 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 static void
 __do_fork(void *aux)
 {
-	struct intr_frame if_;
+	struct intr_frame if_; // 자식의 intr_frame
 	struct thread *parent = (struct thread *)aux;
-	struct thread *current = thread_current();
+	struct thread *current = thread_current(); // 생성될 자식 프로세스
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-	struct intr_frame *parent_if;
+	struct intr_frame *parent_if = &parent->tf;
 	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
@@ -151,6 +165,7 @@ __do_fork(void *aux)
 	if (!supplemental_page_table_copy(&current->spt, &parent->spt))
 		goto error;
 #else
+	// 부모 프로세스의 페이지 테이블들을 다 자식 프로세스에 복사해주는 과정
 	if (!pml4_for_each(parent->pml4, duplicate_pte, parent))
 		goto error;
 #endif
@@ -160,11 +175,16 @@ __do_fork(void *aux)
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
+	
+	// 부모 쓰레드의 파일 디스크립터 테이블을 사용해서 file object를 받아온 후, 각 파일별로 file_duplicate 수행
 
 	process_init();
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
+		// current->tf = if_;
+		// current->tf.R.rax = 0;
+		if_.R.rax = 0;
 		do_iret(&if_);
 error:
 	thread_exit();
@@ -224,7 +244,9 @@ int process_exec(void *f_name)
 
 	// 2. word-align 값 넣기(주소가 8의 배수(word: 8바이트)가 되도록 padding 넣기)
 	//SET_PTR(p, ptr) : p = 스택의 시작 주소, ptr :
+	char* prev_addr = temp_addr;
 	temp_addr = (uint64_t *)((uintptr_t)(ALIGN_DOWN((uintptr_t)temp_addr)));
+	memset(temp_addr, 0, prev_addr - (char*)temp_addr);
 
 	// 3. 유저 스택에 인자값의 포인터 역순으로 넣기
 	for (int j = i; j >= 0 ; j --){
@@ -275,11 +297,16 @@ int process_wait(tid_t child_tid UNUSED)
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
 	// return -1;
-	while (1)
-	{
-		// barrier();
+	// for (int i = 0; i < 100000000; i++) {
+	// 	;
+	// }
+	// int exit_status;
+	// wait(child_tid); // 여기서 멈춰야 함.
+	// printf("child_tid: %d\n", child_tid);
+	while (1) {
 		;
 	}
+	return -1;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
