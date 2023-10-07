@@ -219,6 +219,7 @@ tid_t thread_create(const char *name, int priority,
 	t->tf.ss = SEL_KDSEG;
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
+	//부모 프로세스를 현재 생성된 프로세스의 구조체에 저장해준다
 
 	/* Add to run queue. */
 	thread_unblock(t); // ready queue에 넣어준다.
@@ -368,7 +369,9 @@ tid_t thread_tid(void)
 void thread_exit(void)
 {
 	ASSERT(!intr_context());
-
+//USERPROG할때는 ifdef안이 실행되나? -> 그럼 여길 수정해야하나?
+//1.프로세스의 자식 프로세스를 모두 제거 -> child_list 를 비워주기만 하면 되는건가? 아니면 다 destroy해야하는건가?
+//2.프로세스가 종료된 것을 프로세스 디스크립터를 통해 알림 -> thread 구조체의 exit_status를 통해 알리면 되는건가?
 #ifdef USERPROG
 	process_exit();
 #endif
@@ -607,6 +610,10 @@ init_thread(struct thread *t, const char *name, int priority)
 	memset(t, 0, sizeof *t);						   // 0으로 초기화하고
 	list_init(&t->donations);
 	list_init(&t->lock_list);
+	list_init(&t->child_list);							//자식 프로세스 리스트 초기화
+	for(int i = 0;i<128;i++){
+		t->fdt[i] = NULL;
+	}
 	t->status = THREAD_BLOCKED;						   // blocked 상태로(맨처음 상태가 blocked 상태)
 	strlcpy(t->name, name, sizeof t->name);			   // 인자로 받은 이름을 스레드 이름으로 하는것
 	t->tf.rsp = (uint64_t)t + PGSIZE - sizeof(void *); // 스택 포인터 설정

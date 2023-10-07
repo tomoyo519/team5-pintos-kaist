@@ -108,7 +108,7 @@ tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 static bool
 duplicate_pte(uint64_t *pte, void *va, void *aux)
 {
-	struct thread *current = thread_current(); // 현재 쓰레드(프로세스) = 생성될 프로세스
+	struct thread *current = thread_current();	  // 현재 쓰레드(프로세스) = 생성될 프로세스
 	struct thread *parent = (struct thread *)aux; // 부모 쓰레드(프로세스)
 	void *parent_page;
 	void *newpage;
@@ -131,10 +131,12 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
 	memcpy(newpage, parent_page, PGSIZE);
-
-	if (is_writable(pte)) {
+	if (is_writable(pte))
+	{
 		writable = true;
-	} else {
+	}
+	else
+	{
 		writable = false;
 	}
 
@@ -188,7 +190,7 @@ __do_fork(void *aux)
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
-	
+
 	// 부모 쓰레드의 파일 디스크립터 테이블을 사용해서 file object를 받아온 후, 각 파일별로 file_duplicate 수행
 
 	process_init();
@@ -212,7 +214,7 @@ int process_exec(void *f_name)
 {
 	char *file_name = f_name;
 	bool success;
-	
+
 	char *token, *save_ptr;
 	int i = 0;
 	char *program_name;
@@ -236,7 +238,7 @@ int process_exec(void *f_name)
 	}
 	prg_argv[i] = NULL;
 
-	strlcpy(sub_filename, prg_argv[0], strlen(prg_argv[0])+1);
+	strlcpy(sub_filename, prg_argv[0], strlen(prg_argv[0]) + 1);
 	printf("%s\n", sub_filename);
 	/* We first kill the current context */
 	process_cleanup();
@@ -245,7 +247,7 @@ int process_exec(void *f_name)
 	success = load(sub_filename, &_if);
 	ASSERT(success);
 	// load 다음에 USER_STACK 주소에 접근을 해야 올바른 접근이다.
-	
+
 	// // 1. 유저 스택에 인자값 자체 역순으로 넣기
 	uint64_t *temp_addr = (uint64_t *)USER_STACK;
 	for (int j = i - 1; j >= 0; j--)
@@ -259,17 +261,18 @@ int process_exec(void *f_name)
 	}
 
 	// 2. word-align 값 넣기(주소가 8의 배수(word: 8바이트)가 되도록 padding 넣기)
-	//SET_PTR(p, ptr) : p = 스택의 시작 주소, ptr :
-	char* prev_addr = temp_addr;
+	// SET_PTR(p, ptr) : p = 스택의 시작 주소, ptr :
+	char *prev_addr = temp_addr;
 	temp_addr = (uint64_t *)((uintptr_t)(ALIGN_DOWN((uintptr_t)temp_addr)));
-	memset(temp_addr, 0, prev_addr - (char*)temp_addr);
+	memset(temp_addr, 0, prev_addr - (char *)temp_addr);
 
 	// 3. 유저 스택에 인자값의 포인터 역순으로 넣기
-	for (int j = i; j >= 0 ; j --){
+	for (int j = i; j >= 0; j--)
+	{
 		temp_addr = temp_addr - 1;
 		memcpy(temp_addr, &prg_argv[j], sizeof(void *));
 	}
-	
+
 	// 4. 가짜 리턴 어드레스 넣기
 	temp_addr -= 1;
 	memset(temp_addr, 0, sizeof(void *));
@@ -312,17 +315,31 @@ int process_wait(tid_t child_tid UNUSED)
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	// return -1;
-	for (int i = 0; i < 100000000; i++) {
-		;
+	struct thread *cur = thread_current();				//아마도 부모 프로세스
+	struct thread *e;
+	//일단 자식 프로세스의 exit_status가져오자 -> if문 안에서 하면 될듯?
+	//일단 for문으로 쭉 돌면서 찾기
+	for(e = list_begin(&cur->child_list);e!=list_end(&cur->child_list);e=list_next(e)){
+		
 	}
-	// int exit_status;
-	// wait(child_tid); // 여기서 멈춰야 함.
-	// printf("child_tid: %d\n", child_tid);
-	// while (1) {
-	// 	;
-	// }
-	return -1;
+	//그 전에 
+	//child_tid ==  자식 프로세스의 pid(struct thread 의 pid참고)
+	// 1.자식 프로세스가 종료될때까지 부모 프로세스는 대기
+	//자식 프로세스의 exit_status를 가져와서 종료상태를 반환받을때까지 부모 프로세스는 대기 상태 진입 -> sema_down
+	//->waitlist에 추가됨
+	//자식 프로세스가 종료되면 sema_up해줌->부모 프로세스 readylist에 추가됨 -> 마지막에 sema_up?
+	while(child_tid != 0){
+		// 5.호출한 프로세스의 자식이 아니라면
+		//부모 프로세스의 child_list를 탐색해서 현재 child_tid와 같은 프로세스가 없다면, 호출한 프로세스의 자식이 아님
+		//for문으로 탐색하고, 만약 list_tail까지 왔다면 호출한 프로세스의 자식이 아니니까 return -1
+		// 2.종료 상태를 반환한다
+		if(&cur->child_list)
+	}
+
+	
+	// 자식 프로세스가 정상적으로 종료시(exit_status == 0이면 프로세스 디스크립터를 제거(이게 무슨 말이지?))
+	//exit_status값 리턴, 
+	//비 정상적으로 종료(kill()일 경우 -1리턴 -> kill()이 실행되었을때 무엇을 리턴하는지 확인하기)
 }
 
 /* Exit the process. This function is called by thread_exit (). */
