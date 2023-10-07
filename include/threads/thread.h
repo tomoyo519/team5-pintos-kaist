@@ -100,6 +100,7 @@ struct thread {
 	struct lock* wait_on_lock;
 	struct list lock_list;
 	int64_t thread_tick_count;
+	
 	/*-------------------project2------------------------------*/
 	struct list child_list;				//fork 할때마다 child 리스트에 추가가 되는건지, 정렬해야하는지, child list의 child에도 우선순위가 있는지
 	struct list_elem c_elem;			//child list elem

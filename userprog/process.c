@@ -342,7 +342,7 @@ int process_wait(tid_t child_tid UNUSED)
 		// 1.자식 프로세스가 종료될때까지 부모 프로세스는 대기
 		// 자식 프로세스의 exit_status를 가져와서 종료상태를 반환받을때까지 부모 프로세스는 대기 상태 진입 -> sema_down
 		//->waitlist에 추가됨
-		sema_down(&cur->wait_process_sema);
+		sema_down(&t->wait_process_sema);
 		// 5.호출한 프로세스의 자식이 아니라면
 		// 부모 프로세스의 child_list를 탐색해서 현재 child_tid와 같은 프로세스가 없다면, 호출한 프로세스의 자식이 아님
 		// for문으로 탐색하고, 만약 list_tail까지 왔다면 호출한 프로세스의 자식이 아니니까 return -1

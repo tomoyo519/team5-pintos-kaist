@@ -8,4 +8,5 @@ pintos-mkdisk filesys.dsk 10
 # pintos --fs-disk=10 -p tests/userprog/args-multiple:args-multiple -- -q -f run 'args-multiple ab cd ef gh'
 # pintos --fs-disk=10 -p tests/userprog/halt:halt -- -q -f run 'halt'
 # pintos --fs-disk=10 -p tests/userprog/exit:exit -- -q -f run 'exit'
-pintos --fs-disk=10 -p tests/userprog/fork-once:fork-once -- -q -f run 'fork-once'
+# pintos --fs-disk=10 -p tests/userprog/fork-once:fork-once -- -q -f run 'fork-once'
+pintos --fs-disk=10 -p tests/userprog/wait-simple:wait-simple -- -q -f run 'wait-simple'
