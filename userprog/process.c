@@ -46,11 +46,13 @@ process_init(void)
  * before process_create_initd() returns. Returns the initd's
  * thread id, or TID_ERROR if the thread cannot be created.
  * Notice that THIS SHOULD BE CALLED ONCE. */
-tid_t process_create_initd(const char *file_name)
+tid_t 
+process_create_initd(const char *file_name)
 {
 	char *fn_copy;
 	tid_t tid;
-
+	char *program_name;
+	char *save_ptr;
 	/* Make a copy of FILE_NAME.
 	 * Otherwise there's a race between the caller and load(). */
 	fn_copy = palloc_get_page(0);
@@ -58,8 +60,11 @@ tid_t process_create_initd(const char *file_name)
 		return TID_ERROR;
 	strlcpy(fn_copy, file_name, PGSIZE);
 
+	program_name = strtok_r(file_name, " ", &save_ptr);
+
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create(file_name, PRI_DEFAULT, initd, fn_copy);
+	
+	tid = thread_create(program_name, PRI_DEFAULT, initd, fn_copy);
 	//부모 프로세스의 정보를 알아야됨....어떻게 알지????
 	if (tid == TID_ERROR)
 		palloc_free_page(fn_copy);
@@ -89,17 +94,15 @@ struct semaphore fork_wait;
 
 tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 {
-	memcpy(&prt_if, if_, sizeof(struct intr_frame));
-	// prt_if = if_;
-	/* Clone current thread to new thread.*/
-	// _do_fork의 인자로 현재 부모 프로세스(쓰레드)가 들어감
-	sema_init(&fork_wait, 0);
-	tid_t pid = thread_create(name, PRI_DEFAULT, __do_fork, thread_current());
-
-	// block
-	sema_down(&fork_wait);
-
-	return pid;
+    struct thread* curr = thread_current();
+    memcpy(&curr->tf_for_syscall, if_, sizeof(struct intr_frame));
+    // prt_if = if_;
+    /* Clone current thread to new thread.*/
+    // _do_fork의 인자로 현재 부모 프로세스(쓰레드)가 들어감
+    tid_t pid = thread_create(name, PRI_DEFAULT, __do_fork, curr);
+    // block
+    sema_down(&curr->fork_sema);
+    return pid;
 }
 
 #ifndef VM
@@ -160,57 +163,50 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 static void
 __do_fork(void *aux)
 {
-	struct intr_frame if_; // 자식의 intr_frame
-	struct thread *parent = (struct thread *)aux;
-	struct thread *current = thread_current(); // 생성될 자식 프로세스
-	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-	// struct intr_frame *parent_if = &parent->tf;
-	struct intr_frame *parent_if = &prt_if;
-	bool succ = true;
-
-	/* 1. Read the cpu context to local stack. */
-	memcpy(&if_, parent_if, sizeof(struct intr_frame));
-
-	/* 2. Duplicate PT */
-	current->pml4 = pml4_create();
-	if (current->pml4 == NULL)
-		goto error;
-
-	process_activate(current);
+    struct intr_frame if_; // 자식의 intr_frame
+    struct thread *parent = (struct thread *)aux;
+    struct thread *current = thread_current(); // 생성될 자식 프로세스
+    /* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
+    // struct intr_frame *parent_if = &parent->tf;
+    // struct intr_frame *parent_if = &prt_if;
+    bool succ = true;
+    /* 1. Read the cpu context to local stack. */
+    memcpy(&if_, &parent->tf_for_syscall, sizeof(struct intr_frame));
+    /* 2. Duplicate PT */
+    current->pml4 = pml4_create();
+    if (current->pml4 == NULL)
+        goto error;
+    process_activate(current);
 #ifdef VM
-	supplemental_page_table_init(&current->spt);
-	if (!supplemental_page_table_copy(&current->spt, &parent->spt))
-		goto error;
+    supplemental_page_table_init(&current->spt);
+    if (!supplemental_page_table_copy(&current->spt, &parent->spt))
+        goto error;
 #else
-	// 부모 프로세스의 페이지 테이블들을 다 자식 프로세스에 복사해주는 과정
-	if (!pml4_for_each(parent->pml4, duplicate_pte, parent))
-		goto error;
+    // 부모 프로세스의 페이지 테이블들을 다 자식 프로세스에 복사해주는 과정
+    if (!pml4_for_each(parent->pml4, duplicate_pte, parent))
+        goto error;
 #endif
-
-	/* TODO: Your code goes here.
-	 * TODO: Hint) To duplicate the file object, use `file_duplicate`
-	 * TODO:       in include/filesys/file.h. Note that parent should not return
-	 * TODO:       from the fork() until this function successfully duplicates
-	 * TODO:       the resources of parent.*/
-
-	// 부모 쓰레드의 파일 디스크립터 테이블을 사용해서 file object를 받아온 후, 각 파일별로 file_duplicate 수행
-
-	process_init();
-
-	/* Finally, switch to the newly created process. */
-	if (succ)
-	{	
-		list_push_back(&parent->child_list, &current->c_elem);
-		current -> parent_p = parent;
-		if_.R.rax = 0;
-		memcpy(&current->tf, &if_, sizeof(struct intr_frame));
-		// current->tf = if_;
-		sema_up(&fork_wait);
-		do_iret(&current->tf);
-	}
+    /* TODO: Your code goes here.
+     * TODO: Hint) To duplicate the file object, use `file_duplicate`
+     * TODO:       in include/filesys/file.h. Note that parent should not return
+     * TODO:       from the fork() until this function successfully duplicates
+     * TODO:       the resources of parent.*/
+    // 부모 쓰레드의 파일 디스크립터 테이블을 사용해서 file object를 받아온 후, 각 파일별로 file_duplicate 수행
+    process_init();
+    /* Finally, switch to the newly created process. */
+    if (succ)
+    {
+        list_push_back(&parent->child_list, &current->c_elem);
+        current -> parent_p = parent;
+        if_.R.rax = 0;
+        memcpy(&current->tf, &if_, sizeof(struct intr_frame));
+        // current->tf = if_;
+        sema_up(&parent->fork_sema);
+        do_iret(&current->tf);
+    }
 error:
-	thread_exit();
-}
+    thread_exit();
+} 
 
 /* Switch the current execution context to the f_name.
  * Returns -1 on fail. */
@@ -243,7 +239,7 @@ int process_exec(void *f_name)
 	prg_argv[i] = NULL;
 
 	strlcpy(sub_filename, prg_argv[0], strlen(prg_argv[0]) + 1);
-	printf("%s\n", sub_filename);
+	// printf("%s\n", sub_filename);
 	/* We first kill the current context */
 	process_cleanup();
 
@@ -292,7 +288,7 @@ int process_exec(void *f_name)
 	if (!success)
 		return -1;
 
-	hex_dump(_if.rsp, _if.rsp, (char *)USER_STACK - (char *)temp_addr, true);
+	// hex_dump(_if.rsp, _if.rsp, (char *)USER_STACK - (char *)temp_addr, true);
 	// hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)temp_addr, true);
 	/* Start switched process. */
 
@@ -348,7 +344,13 @@ int process_wait(tid_t child_tid UNUSED)
 		// for문으로 탐색하고, 만약 list_tail까지 왔다면 호출한 프로세스의 자식이 아니니까 return -1
 		// 2.종료 상태를 반환한다
 	}
-	return t->exit_status;
+	if(t->exit_status == TID_ERROR){
+		return -1;
+	}
+	else{
+		return t->exit_status;
+	}
+	
 
 	// 자식 프로세스가 정상적으로 종료시(exit_status == 0이면 프로세스 디스크립터를 제거(이게 무슨 말이지?))
 	// exit_status값 리턴,
@@ -729,6 +731,20 @@ install_page(void *upage, void *kpage, bool writable)
 	/* Verify that there's not already a page at that virtual
 	 * address, then map our page there. */
 	return (pml4_get_page(t->pml4, upage) == NULL && pml4_set_page(t->pml4, upage, kpage, writable));
+}
+int process_add_file(struct file *f)
+{
+	struct thread *curr = thread_current();
+	struct file **fdt = curr->fdt;
+
+	// limit을 넘지 않는 범위 안에서 빈 자리 탐색
+	while (curr->next_fd < FDT_COUNT_LIMIT && fdt[curr->next_fd])
+		curr->next_fd++;
+	if (curr->next_fd >= FDT_COUNT_LIMIT)
+		return -1;
+	fdt[curr->next_fd] = f;
+
+	return curr->next_fd;
 }
 #else
 /* From here, codes will be used after project 3.

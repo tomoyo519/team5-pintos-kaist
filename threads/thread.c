@@ -625,6 +625,7 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->magic = THREAD_MAGIC; // 스택 오버플로우 판단하는 변수
 	t->exit_status = INIT_EXIT_STATUS;
 	sema_init(&t->wait_process_sema, 0);
+	sema_init(&t->fork_sema, 0);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

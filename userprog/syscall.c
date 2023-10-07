@@ -9,11 +9,16 @@
 #include "intrinsic.h"
 #include "threads/init.h"
 #include "userprog/process.h"
+#include "filesys/filesys.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
-int write(int fd, const void *buffer, unsigned int size);
-
+// int write_(int fd, const void *buffer, unsigned int size);
+int write_(int fd, void *buffer, unsigned size);
+void check_address(void *addr);
+bool create_(const char *file, unsigned initial_size);
+bool remove_(const char *file);
+int exit_(int status);
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -72,13 +77,16 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		f->R.rax = process_wait(f->R.rdi);
 		break;
 	case SYS_CREATE:
-		// create();
+		f->R.rax = create_(f->R.rdi, f->R.rsi);
+		printf("%s: create(%d)\n", curr_t->name, f->R.rdi);
 		break;
 	case SYS_REMOVE:
-		// remove();
+		f->R.rax = remove_(f->R.rdi);
+		printf("%s: remove\n", curr_t->name);
 		break;
 	case SYS_OPEN:
-		// open();
+		f->R.rax = open_(f->R.rdi);
+		printf("%s: open\n", curr_t->name);
 		break;
 	case SYS_FILESIZE:
 		// filesize();
@@ -87,7 +95,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		// read();
 		break;
 	case SYS_WRITE:
-		write(f->R.rdi, f->R.rsi, f->R.rdx);
+		write_(f->R.rdi, f->R.rsi, f->R.rdx);
 		// printf("%s", f->R.rsi);
 		// write();
 		break;
@@ -104,13 +112,71 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		break;
 	}
 }
-
-int write(int fd, const void *buffer, unsigned int size)
+void check_address(void *addr)
 {
-	if (fd == 1)
+	// /*주소 값이 유저 영역에서 사용하는 주소 값인지 확인 하는 함수
+	// 		유저 영역을 벗어난 영역일 경우 프로세스
+	// 		종료(exit(-1)) *
+	// 	/
+	if (!is_user_vaddr(addr))
+	{ // 유저 영억이 아니거나,
+		exit_(-1);
+	}
+	if (addr == NULL)
+	{ // null이면 프로세스 종료.
+		exit_(-1);
+	}
+// 	if (pml4_get_page(thread_current()->pml4, addr) == NULL)
+// 		exit(-1);
+}
+bool create_(const char *file, unsigned initial_size)
+{
+	// 파일 생성에 성공했다면 true, 실패했다면 false
+	check_address(file);
+	return filesys_create(file, initial_size);
+}
+
+bool remove_(const char *file)
+{
+	check_address(file);
+	return filesys_remove(file);
+}
+
+int open_(const char *file_name)
+{
+	check_address(file_name);
+	// 동시성 제어 필요
+	struct file *curr_file = filesys_open(file_name);
+	if (curr_file == NULL) // 파일 열기 실패
 	{
-		putbuf(buffer, size);
+		return -1;
+	}
+	int fd = process_add_file(curr_file); // 파일 디스크립터 할당
+	if (fd == -1)
+	{
+		return -1;
+	}
+	else
+	{
+		return fd;
+	}
+}
+
+int exit_(int status){
+	thread_exit();
+	return status;
+}
+int write_(int fd, void *buffer, unsigned size)
+{
+	check_address(buffer); //유효성 검사 -> write-bad-ptr 통과
+
+	if(fd==1)
+	{
+		putbuf(buffer, size);//fd값이 1일때 버퍼에 저장된 데이터를 화면에 출력 (putbuf()이용)
+		return sizeof(buffer); //성공시 기록한 데이터의 바이트 수를 반환
+	}
+	else
+	{
 		return size;
 	}
-	return -1;
 }
