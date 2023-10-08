@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "threads/interrupt.h"
 #include "threads/synch.h"
+#include "filesys/file.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -113,6 +114,7 @@ struct thread {
 	struct semaphore fork_sema;
     struct intr_frame tf_for_syscall;
 	struct semaphore wait_process_sema;
+	int dead_child[100];				//왜 100? 몰라!
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */

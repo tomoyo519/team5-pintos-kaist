@@ -46,8 +46,7 @@ process_init(void)
  * before process_create_initd() returns. Returns the initd's
  * thread id, or TID_ERROR if the thread cannot be created.
  * Notice that THIS SHOULD BE CALLED ONCE. */
-tid_t 
-process_create_initd(const char *file_name)
+tid_t process_create_initd(const char *file_name)
 {
 	char *fn_copy;
 	tid_t tid;
@@ -63,9 +62,9 @@ process_create_initd(const char *file_name)
 	program_name = strtok_r(file_name, " ", &save_ptr);
 
 	/* Create a new thread to execute FILE_NAME. */
-	
+
 	tid = thread_create(program_name, PRI_DEFAULT, initd, fn_copy);
-	//부모 프로세스의 정보를 알아야됨....어떻게 알지????
+	// 부모 프로세스의 정보를 알아야됨....어떻게 알지????
 	if (tid == TID_ERROR)
 		palloc_free_page(fn_copy);
 	return tid;
@@ -94,15 +93,15 @@ struct semaphore fork_wait;
 
 tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 {
-    struct thread* curr = thread_current();
-    memcpy(&curr->tf_for_syscall, if_, sizeof(struct intr_frame));
-    // prt_if = if_;
-    /* Clone current thread to new thread.*/
-    // _do_fork의 인자로 현재 부모 프로세스(쓰레드)가 들어감
-    tid_t pid = thread_create(name, PRI_DEFAULT, __do_fork, curr);
-    // block
-    sema_down(&curr->fork_sema);
-    return pid;
+	struct thread *curr = thread_current();
+	memcpy(&curr->tf_for_syscall, if_, sizeof(struct intr_frame));
+	// prt_if = if_;
+	/* Clone current thread to new thread.*/
+	// _do_fork의 인자로 현재 부모 프로세스(쓰레드)가 들어감
+	tid_t pid = thread_create(name, PRI_DEFAULT, __do_fork, curr);
+	// block
+	sema_down(&curr->fork_sema);
+	return pid;
 }
 
 #ifndef VM
@@ -163,50 +162,50 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 static void
 __do_fork(void *aux)
 {
-    struct intr_frame if_; // 자식의 intr_frame
-    struct thread *parent = (struct thread *)aux;
-    struct thread *current = thread_current(); // 생성될 자식 프로세스
-    /* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-    // struct intr_frame *parent_if = &parent->tf;
-    // struct intr_frame *parent_if = &prt_if;
-    bool succ = true;
-    /* 1. Read the cpu context to local stack. */
-    memcpy(&if_, &parent->tf_for_syscall, sizeof(struct intr_frame));
-    /* 2. Duplicate PT */
-    current->pml4 = pml4_create();
-    if (current->pml4 == NULL)
-        goto error;
-    process_activate(current);
+	struct intr_frame if_; // 자식의 intr_frame
+	struct thread *parent = (struct thread *)aux;
+	struct thread *current = thread_current(); // 생성될 자식 프로세스
+	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
+	// struct intr_frame *parent_if = &parent->tf;
+	// struct intr_frame *parent_if = &prt_if;
+	bool succ = true;
+	/* 1. Read the cpu context to local stack. */
+	memcpy(&if_, &parent->tf_for_syscall, sizeof(struct intr_frame));
+	/* 2. Duplicate PT */
+	current->pml4 = pml4_create();
+	if (current->pml4 == NULL)
+		goto error;
+	process_activate(current);
 #ifdef VM
-    supplemental_page_table_init(&current->spt);
-    if (!supplemental_page_table_copy(&current->spt, &parent->spt))
-        goto error;
+	supplemental_page_table_init(&current->spt);
+	if (!supplemental_page_table_copy(&current->spt, &parent->spt))
+		goto error;
 #else
-    // 부모 프로세스의 페이지 테이블들을 다 자식 프로세스에 복사해주는 과정
-    if (!pml4_for_each(parent->pml4, duplicate_pte, parent))
-        goto error;
+	// 부모 프로세스의 페이지 테이블들을 다 자식 프로세스에 복사해주는 과정
+	if (!pml4_for_each(parent->pml4, duplicate_pte, parent))
+		goto error;
 #endif
-    /* TODO: Your code goes here.
-     * TODO: Hint) To duplicate the file object, use `file_duplicate`
-     * TODO:       in include/filesys/file.h. Note that parent should not return
-     * TODO:       from the fork() until this function successfully duplicates
-     * TODO:       the resources of parent.*/
-    // 부모 쓰레드의 파일 디스크립터 테이블을 사용해서 file object를 받아온 후, 각 파일별로 file_duplicate 수행
-    process_init();
-    /* Finally, switch to the newly created process. */
-    if (succ)
-    {
-        list_push_back(&parent->child_list, &current->c_elem);
-        current -> parent_p = parent;
-        if_.R.rax = 0;
-        memcpy(&current->tf, &if_, sizeof(struct intr_frame));
-        // current->tf = if_;
-        sema_up(&parent->fork_sema);
-        do_iret(&current->tf);
-    }
+	/* TODO: Your code goes here.
+	 * TODO: Hint) To duplicate the file object, use `file_duplicate`
+	 * TODO:       in include/filesys/file.h. Note that parent should not return
+	 * TODO:       from the fork() until this function successfully duplicates
+	 * TODO:       the resources of parent.*/
+	// 부모 쓰레드의 파일 디스크립터 테이블을 사용해서 file object를 받아온 후, 각 파일별로 file_duplicate 수행
+	process_init();
+	/* Finally, switch to the newly created process. */
+	if (succ)
+	{
+		list_push_back(&parent->child_list, &current->c_elem);
+		current->parent_p = parent;
+		if_.R.rax = 0;
+		memcpy(&current->tf, &if_, sizeof(struct intr_frame));
+		// current->tf = if_;
+		sema_up(&parent->fork_sema);
+		do_iret(&current->tf);
+	}
 error:
-    thread_exit();
-} 
+	thread_exit();
+}
 
 /* Switch the current execution context to the f_name.
  * Returns -1 on fail. */
@@ -318,9 +317,17 @@ int process_wait(tid_t child_tid UNUSED)
 	struct thread *cur = thread_current(); // 아마도 부모 프로세스
 	struct list_elem *e;
 	struct thread *t;
+	enum intr_level prev_level;
 	// 일단 자식 프로세스의 exit_status가져오자 -> if문 안에서 하면 될듯?
 	// 일단 for문으로 쭉 돌면서 찾기
-	ASSERT(!list_empty(&cur->child_list));
+	
+	// ASSERT(!list_empty(&cur->child_list));
+	// prev_level = intr_disable();
+	if(list_empty(&cur->child_list)){
+		//만약 child_list에 자식 쓰레드가 없다면, 이미 해당 자식은 죽었다는 의미이다.
+		//이 경우에는 dead_threads[자식 쓰레드의 tid]에 이미 자식이 자신의 exit_status를 넣어주었기 때문에 block에 들어가지 말고 이 값을 바로 리턴해준다.
+		return cur->dead_child[child_tid];
+	}
 	for (e = list_begin(&cur->child_list); e != list_end(&cur->child_list); e = list_next(e))
 	{
 		t = list_entry(e, struct thread, c_elem);
@@ -329,9 +336,11 @@ int process_wait(tid_t child_tid UNUSED)
 			break;
 		}
 	}
+	
+	
 	// 그 전에
 	// child_tid ==  자식 프로세스의 pid(struct thread 의 pid참고)
-
+	
 	// 자식 프로세스가 종료되면 sema_up해줌->부모 프로세스 readylist에 추가됨 -> 마지막에 sema_up? -> 이건 process_exit에서 해줌
 	while (t->exit_status == INIT_EXIT_STATUS)
 	{
@@ -344,13 +353,16 @@ int process_wait(tid_t child_tid UNUSED)
 		// for문으로 탐색하고, 만약 list_tail까지 왔다면 호출한 프로세스의 자식이 아니니까 return -1
 		// 2.종료 상태를 반환한다
 	}
-	if(t->exit_status == TID_ERROR){
+	// intr_set_level(prev_level);
+	if (t->exit_status == TID_ERROR)
+	{
+		
 		return -1;
 	}
-	else{
+	else
+	{
 		return t->exit_status;
 	}
-	
 
 	// 자식 프로세스가 정상적으로 종료시(exit_status == 0이면 프로세스 디스크립터를 제거(이게 무슨 말이지?))
 	// exit_status값 리턴,
@@ -360,12 +372,27 @@ int process_wait(tid_t child_tid UNUSED)
 /* Exit the process. This function is called by thread_exit (). */
 void process_exit(void)
 {
-	struct thread *curr = thread_current(); // 종료 전이니까 자식 프로세스임
+	struct thread *cur = thread_current(); // 종료 전이니까 자식 프로세스임
 	/* TODO: Your code goes here.
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-	sema_up(&curr->wait_process_sema);
+	struct list_elem *e;
+	struct thread *t;
+	struct list_elem *del_child;
+	// ASSERT(!list_empty(&cur->child_list));
+	// if(cur->parent_p == NULL){//main일때
+	// 	while(!list_empty(&cur->child_list)){
+	// 	list_pop_front(&cur->child_list);
+	// 	}
+	// }
+	// else if(list_empty(&cur->child_list)){
+	// 	//자식이야
+		
+	// }
+	
+	list_remove(&cur -> c_elem);					//뒤지니까 자식 리스트에서 삭제
+	sema_up(&cur->wait_process_sema);
 	process_cleanup();
 }
 
@@ -735,7 +762,7 @@ install_page(void *upage, void *kpage, bool writable)
 int process_add_file(struct file *f)
 {
 	struct thread *curr = thread_current();
-	struct file **fdt = curr->fdt;
+	struct file **fdt = curr->file_dt;
 
 	// limit을 넘지 않는 범위 안에서 빈 자리 탐색
 	while (curr->next_fd < FDT_COUNT_LIMIT && fdt[curr->next_fd])

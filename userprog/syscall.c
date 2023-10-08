@@ -10,6 +10,8 @@
 #include "threads/init.h"
 #include "userprog/process.h"
 #include "filesys/filesys.h"
+#include "filesys/inode.h"
+#include "filesys/file.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -61,8 +63,10 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		// 유저: exit(EXIT_NUM, status) 호출
 		f->R.rax = f->R.rdi;
 		// 프로세스 디스크립터에 exit_status값 저장
-		//curr_t == child
+		// curr_t == child
 		curr_t->exit_status = f->R.rdi;
+		int child_pid = curr_t->tid;
+		curr_t->parent_p->dead_child[child_pid] = curr_t->exit_status; // dead_threads 배열에는 자식 쓰레드의 exit_status가 들어간다.
 		printf("%s: exit(%d)\n", curr_t->name, f->R.rdi);
 		thread_exit();
 		break;
@@ -71,6 +75,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		f->R.rax = process_fork(f->R.rdi, f);
 		break;
 	case SYS_EXEC:
+		f->R.rax = f->R.rdi;					// exec() 시스템 콜 호출 후 반환 값은 인터럽트 프레임의 exa에 저장
 		// exec();
 		break;
 	case SYS_WAIT:
@@ -89,6 +94,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		printf("%s: open\n", curr_t->name);
 		break;
 	case SYS_FILESIZE:
+		f->R.rax = file_length(curr_t->file_dt[curr_t->fdidx]);
 		// filesize();
 		break;
 	case SYS_READ:
@@ -126,8 +132,8 @@ void check_address(void *addr)
 	{ // null이면 프로세스 종료.
 		exit_(-1);
 	}
-// 	if (pml4_get_page(thread_current()->pml4, addr) == NULL)
-// 		exit(-1);
+	// 	if (pml4_get_page(thread_current()->pml4, addr) == NULL)
+	// 		exit(-1);
 }
 bool create_(const char *file, unsigned initial_size)
 {
@@ -162,21 +168,32 @@ int open_(const char *file_name)
 	}
 }
 
-int exit_(int status){
+int exit_(int status)
+{
 	thread_exit();
 	return status;
 }
 int write_(int fd, void *buffer, unsigned size)
 {
-	check_address(buffer); //유효성 검사 -> write-bad-ptr 통과
+	// check_address(buffer); //유효성 검사 -> write-bad-ptr 통과
 
-	if(fd==1)
+	if (fd == 1)
 	{
-		putbuf(buffer, size);//fd값이 1일때 버퍼에 저장된 데이터를 화면에 출력 (putbuf()이용)
-		return sizeof(buffer); //성공시 기록한 데이터의 바이트 수를 반환
+		putbuf(buffer, size);  // fd값이 1일때 버퍼에 저장된 데이터를 화면에 출력 (putbuf()이용)
+		return sizeof(buffer); // 성공시 기록한 데이터의 바이트 수를 반환
 	}
 	else
 	{
 		return size;
 	}
 }
+
+// int exec_(const *cmd_line){
+// 	//자식 프로세스를 생성하고 프로그램을 실행시키는 시스템 콜
+// 	//프로세스를 생성하는 함수 이용
+// 	//프로세스 생성에 성공시 생성된 프로세스의 pid값을 반환, 실패시 -1반환
+// 	//부모 프로세스는 자식 프로세스의 응용 프로그램이 메모리에 탑재 될때까지 대기
+// 	//sema_down
+// 	//cmd_line : 새로운 프로세스에 실행할 프로그램 명령어
+// 	//메모리 탑재 성공시 유저 프로그램 실행, 실패시 스레드 종료
+// }

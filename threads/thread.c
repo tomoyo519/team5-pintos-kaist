@@ -224,7 +224,12 @@ tid_t thread_create(const char *name, int priority,
 	//부모 프로세스를 현재 생성된 프로세스의 구조체에 저장해준다
 	//부모 프로세스는 현재 러닝중인 스레드인가?? -> 맞다!
 	list_push_back(&parent -> child_list, &t->c_elem);
-	t->parent_p = parent;
+	if(t->tid == 1){
+		t->parent_p = NULL;
+	}
+	else {
+		t->parent_p = parent;
+	}
 	/* Add to run queue. */
 	thread_unblock(t); // ready queue에 넣어준다.
 
@@ -615,8 +620,11 @@ init_thread(struct thread *t, const char *name, int priority)
 	list_init(&t->donations);
 	list_init(&t->lock_list);
 	list_init(&t->child_list);							//자식 프로세스 리스트 초기화
-	// for(int i = 0;i<128;i++){
-	// 	t->fdt[i] = NULL;
+	for(int i = 0;i<100;i++){
+		t->dead_child[i] = INIT_EXIT_STATUS;
+	}
+	// for(int j = 0;j<128;j++){
+	// 	t->file_dt[j] = NULL;
 	// }
 	t->status = THREAD_BLOCKED;						   // blocked 상태로(맨처음 상태가 blocked 상태)
 	strlcpy(t->name, name, sizeof t->name);			   // 인자로 받은 이름을 스레드 이름으로 하는것
@@ -751,11 +759,15 @@ do_schedule(int status)
 	ASSERT(thread_current()->status == THREAD_RUNNING);
 	while (!list_empty(&destruction_req))
 	{ // 파괴하려는 스레드가 모인 리스트가 빌때까지
-		struct thread *victim =
-			list_entry(list_pop_front(&destruction_req), struct thread, elem);
+		struct thread *victim = list_entry(list_pop_front(&destruction_req), struct thread, elem);
+		int victim_tid = victim -> tid;
+		//insert dead list
+		//자식 쓰레드가 destruction_req[]에 들어간 후, dead_threads[자식의 tid]에 자식의 exit_status를 넣는다.
+		victim -> parent_p -> dead_child[victim_tid] = victim -> exit_status; 
 		palloc_free_page(victim); // 희생자들을 page free 시킨다
 	}
 	thread_current()->status = status;
+
 	schedule();
 }
 /*ready queue에 있는 우선순위 높은 스레드를 running상태로 바꿔주는 것*/
