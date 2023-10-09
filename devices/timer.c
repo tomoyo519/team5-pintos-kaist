@@ -29,7 +29,7 @@ static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
-void timer_print_stats(void);
+
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
    corresponding interrupt.
@@ -90,8 +90,7 @@ timer_ticks (void) {
 }
 
 /* Returns the number of timer ticks elapsed since THEN, which
-   should be a value once returned by timer_ticks(). 
-   */
+   should be a value once returned by timer_ticks(). */
 int64_t
 timer_elapsed (int64_t then) {
 	return timer_ticks () - then;
@@ -105,19 +104,15 @@ timer_elapsed (int64_t then) {
 //현재 스레드를 tick시간동안 잠재우는 함수
 void
 timer_sleep (int64_t ticks) {
-	// int64_t start = timer_ticks (); //현재 tic을 start에 넣어서
-	
-	ASSERT (intr_get_level () == INTR_ON); //interrupt 상태인지 확인
-	// printf("<1>\n");
-	// while (timer_elapsed (start) < ticks) //start로 부터 시간이 얼마나 지났는지
+	int64_t start = timer_ticks (); // current time (in ticks : 1ms)
 
+	ASSERT (intr_get_level () == INTR_ON);  //interrupt 상태인지 확인
+	/* busy waiting */
+	// while (timer_elapsed (start) < ticks)
 	// 	thread_yield ();
-	// printf("Switch : %d\n", swch);
-	
-	// printf("in 'while' ... running\n");
-	make_thread_sleep(timer_ticks () + ticks); //현재 시간부터 재워야할 tick을 더해주어야함
-	// printf("timer_sleep finish\n");
-	// thread_print_stats();
+	/* sleep & awake */
+	// if (timer_elapsed(start) < ticks)
+	thread_sleep(start+ticks); // alarm-multiple 관련 변경 // current time + ticks(required) = time to be awaken => local ticks
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -143,13 +138,26 @@ void
 timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
+
 /* Timer interrupt handler. */
+/* 이후 프로젝트에서 에러시 timer_ticks() -> ticks 변경 ? */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
-	make_thread_wakeup(ticks);
+	if (thread_mlfqs){ // mlfqs 관련 변경
+		mlfqs_increment();
+		if (timer_ticks() % 4 == 0){
+			mlfqs_priority(thread_current());
+			if (timer_ticks() % TIMER_FREQ == 0){
+				mlfqs_load_avg();
+				mlfqs_recalc();
+			}
+		}
+	}
+	/* per every tick(1ms), check if there are any threads to be awaken */
+	if(get_next_tick_to_awake() <= ticks) // if the first candidate of sleep list needds to be awaken (== if there's at least 1 thread to be awaken)
+		thread_awake(ticks); // alarm-multiple 관련 변경 // by calling thread_awake(), check every threads in the sleep list and wakeup if necessary
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

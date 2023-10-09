@@ -213,7 +213,6 @@ pml4_destroy (uint64_t *pml4) {
  * register. */
 void
 pml4_activate (uint64_t *pml4) {
-	
 	lcr3 (vtop (pml4 ? pml4 : base_pml4));
 }
 
@@ -230,7 +229,6 @@ pml4_get_page (uint64_t *pml4, const void *uaddr) {
 
 	// 해당 페이지 가상주소
 	if (pte && (*pte & PTE_P))
-
 		return ptov (PTE_ADDR (*pte)) + pg_ofs (uaddr);
 	return NULL;
 }

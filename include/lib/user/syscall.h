@@ -32,17 +32,12 @@ int open (const char *file);
 int filesize (int fd);
 int read (int fd, void *buffer, unsigned length);
 int write (int fd, const void *buffer, unsigned length);
-int write_(int fd, void *buffer, unsigned size);
 void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
+
 int dup2(int oldfd, int newfd);
-void check_address(void *addr);
-bool create_(const char *file, unsigned initial_size);
-bool remove_(const char *file);
-int open_(const char *file_name);
-int exit_(int status);
-int file_length(const struct file *file);
+
 /* Project 3 and optionally project 4. */
 void *mmap (void *addr, size_t length, int writable, int fd, off_t offset);
 void munmap (void *addr);

@@ -10,13 +10,6 @@ struct semaphore {
 	struct list waiters;        /* List of waiting threads. */
 };
 
-/* One semaphore in a list. */
-struct semaphore_elem {
-	struct list_elem elem;              /* List element. */
-   struct thread* holder;
-	struct semaphore semaphore;         /* This semaphore. */
-};
-
 void sema_init (struct semaphore *, unsigned value);
 void sema_down (struct semaphore *);
 bool sema_try_down (struct semaphore *);
@@ -25,8 +18,6 @@ void sema_self_test (void);
 
 /* Lock. */
 struct lock {
-	int priority;
-	struct list_elem elem;
 	struct thread *holder;      /* Thread holding lock (for debugging). */
 	struct semaphore semaphore; /* Binary semaphore controlling access. */
 };
@@ -46,6 +37,9 @@ void cond_init (struct condition *);
 void cond_wait (struct condition *, struct lock *);
 void cond_signal (struct condition *, struct lock *);
 void cond_broadcast (struct condition *, struct lock *);
+
+/* priority-sema,condvar 관련 변경 */
+bool cmp_sem_priority (const struct list_elem *a, const struct list_elem *b, void *aux);
 
 /* Optimization barrier.
  *
