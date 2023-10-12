@@ -2,6 +2,7 @@
 #define VM_VM_H
 #include <stdbool.h>
 #include "threads/palloc.h"
+#include "hash.h"
 
 enum vm_type {
 	/* page not initialized */
@@ -36,19 +37,20 @@ struct thread;
 
 #define VM_TYPE(type) ((type) & 7)
 
-/* The representation of "page".
- * This is kind of "parent class", which has four "child class"es, which are
- * uninit_page, file_page, anon_page, and page cache (project4).
- * DO NOT REMOVE/MODIFY PREDEFINED MEMBER OF THIS STRUCTURE. */
+/* "페이지"의 표현입니다.
+ * 이것은 네 개의 "자식 클래스"를 가진 "부모 클래스"와 같으며,
+ * 이 자식 클래스들은 uninit_page, file_page, anon_page 및 페이지 캐시 (프로젝트 4)입니다.
+ * 이 구조체의 미리 정의된 멤버를 제거하거나 수정하지 마십시오. */
 struct page {
 	const struct page_operations *operations;
 	void *va;              /* Address in terms of user space */
 	struct frame *frame;   /* Back reference for frame */
 
 	/* Your implementation */
+	struct hash_elem h_elem; /* hash elem */
 
-	/* Per-type data are binded into the union.
-	 * Each function automatically detects the current union */
+	/* 각 유형의 데이터는 이 유니온에 바인딩됩니다.
+	 * 각 함수는 자동으로 현재 유니온을 감지합니다. */
 	union {
 		struct uninit_page uninit;
 		struct anon_page anon;
@@ -61,8 +63,10 @@ struct page {
 
 /* The representation of "frame" */
 struct frame {
-	void *kva;
+	void *kva;		/* 커널 가상 주소 */
+	struct hash *hash;
 	struct page *page;
+	// 멤버 추가 가능!!
 };
 
 /* The function table for page operations.
@@ -81,10 +85,12 @@ struct page_operations {
 #define destroy(page) \
 	if ((page)->operations->destroy) (page)->operations->destroy (page)
 
-/* Representation of current process's memory space.
- * We don't want to force you to obey any specific design for this struct.
- * All designs up to you for this. */
+
+/* 현재 프로세스의 메모리 공간 표현입니다.
+ * 특정 디자인을 강요하고 싶지는 않습니다.
+ * 이 구조체에 대한 모든 디자인은 여러분에게 달렸습니다. */
 struct supplemental_page_table {
+	struct hash *hash;
 };
 
 #include "threads/thread.h"

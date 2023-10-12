@@ -1,4 +1,4 @@
-cd userprog
+cd vm
 make clean
 make
 cd build

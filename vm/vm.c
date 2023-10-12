@@ -4,8 +4,9 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 
-/* Initializes the virtual memory subsystem by invoking each subsystem's
- * intialize codes. */
+bool hash_compare (const struct hash_elem *a, const struct hash_elem *b, void *aux);
+/* 가상 메모리 서브시스템을 초기화하기 위해
+ * 각 서브시스템의 초기화 코드를 호출합니다. */
 void
 vm_init (void) {
 	vm_anon_init ();
@@ -18,9 +19,9 @@ vm_init (void) {
 	/* TODO: Your code goes here. */
 }
 
-/* Get the type of the page. This function is useful if you want to know the
- * type of the page after it will be initialized.
- * This function is fully implemented now. */
+/* 페이지 유형을 가져옵니다.
+ * 이 함수는 페이지가 초기화된 후의 유형을 알고 싶을 때 유용합니다.
+ * 이 함수는 현재 완전히 구현되었습니다. */
 enum vm_type
 page_get_type (struct page *page) {
 	int ty = VM_TYPE (page->operations->type);
@@ -37,9 +38,9 @@ static struct frame *vm_get_victim (void);
 static bool vm_do_claim_page (struct page *page);
 static struct frame *vm_evict_frame (void);
 
-/* Create the pending page object with initializer. If you want to create a
- * page, do not create it directly and make it through this function or
- * `vm_alloc_page`. */
+/* initializer와 함께 대기 중인(pending) 페이지 객체를 생성합니다.
+ * 페이지를 만들려면 직접 만들지 말고
+ * 이 함수나 `vm_alloc_page`를 통해 만드세요. */
 bool
 vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		vm_initializer *init, void *aux) {
@@ -50,11 +51,11 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 	/* Check wheter the upage is already occupied or not. */
 	if (spt_find_page (spt, upage) == NULL) {
-		/* TODO: Create the page, fetch the initialier according to the VM type,
-		 * TODO: and then create "uninit" page struct by calling uninit_new. You
-		 * TODO: should modify the field after calling the uninit_new. */
+		/* TODO: 페이지를 생성하고 VM 유형에 따라 초기화자를 가져온 다음
+		 * uninit_new를 호출하여 "uninit" 페이지 구조체를 만드십시오.
+		 * uninit_new를 호출한 후 필드를 수정해야 합니다. */
 
-		/* TODO: Insert the page into the spt. */
+		/* TODO: 페이지를 spt에 삽입하십시오. */
 	}
 err:
 	return false;
@@ -104,10 +105,11 @@ vm_evict_frame (void) {
 	return NULL;
 }
 
-/* palloc() and get frame. If there is no available page, evict the page
- * and return it. This always return valid address. That is, if the user pool
- * memory is full, this function evicts the frame to get the available memory
- * space.*/
+/* palloc() 및 프레임 가져오기.
+ * 사용 가능한 페이지가 없는 경우 페이지를 제거하고 반환합니다.
+ * 항상 유효한 주소를 반환합니다. 
+ * 사용자 풀 메모리가 가득 찬 경우,
+ * 이 함수는 사용 가능한 메모리 공간을 얻기 위해 프레임을 제거합니다. */
 static struct frame *
 vm_get_frame (void) {
 	struct frame *frame = NULL;
@@ -115,6 +117,7 @@ vm_get_frame (void) {
 
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
+	// ASSERT (hash_empty(frame->hash));
 	return frame;
 }
 
@@ -163,6 +166,7 @@ vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
 
 	/* Set links */
+	hash_insert(&frame->hash, &page->h_elem);
 	frame->page = page;
 	page->frame = frame;
 
@@ -170,10 +174,24 @@ vm_do_claim_page (struct page *page) {
 
 	return swap_in (page, frame->kva);
 }
+// # include "mmu.h"
+bool
+hash_compare (const struct hash_elem *a, const struct hash_elem *b, void *aux){
+	struct page * p_a = hash_entry(a, struct page, h_elem);
+	struct page * p_b = hash_entry(b, struct page, h_elem);
+	return p_a->va < p_b->va;
+}
+
+uint64_t
+do_hashing(const struct hash_elem *a, void *aux){
+	struct page * p_a = hash_entry(a, struct page, h_elem);
+	return hash_bytes(&p_a->va, sizeof p_a->va);
+}
 
 /* Initialize new supplemental page table */
 void
-supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+supplemental_page_table_init (struct supplemental_page_table *spt) {
+	hash_init(&spt->hash, do_hashing, hash_compare, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
