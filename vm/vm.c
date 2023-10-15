@@ -64,6 +64,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		// 페이지를 생성하고,
 		struct page *p = (struct page *)malloc(sizeof(struct page));
 		// VM 유형에 따라 초기화 함수를 가져와서
+		//// 함수 포인터방식.. 함수 자체가 주소값을 가지고있기 때문에 이름만 넘기면 된다.
 		bool (*page_initializer)(struct page *, enum vm_type, void *);
 
 		switch (VM_TYPE(type))
@@ -101,6 +102,7 @@ spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 	// va에 해당하는 hash_elem 찾기
 	page->va = pg_round_down(va); // page의 시작 주소 할당
 	e = hash_find(&spt->spt_hash, &page->hash_elem);
+	// TODO
 	free(page);
 
 	// 있으면 e에 해당하는 페이지 반환
@@ -179,6 +181,13 @@ vm_handle_wp(struct page *page UNUSED)
 }
 
 /* Return true on success */
+// spt_find_page를 통해 SPT를 참조하여 Faulted address 에 해당하는 페이지 구조체를 해결하는 함수
+// pagefulat 가 발새아면 제어권 받는 함수.
+// 물리프레임이 존재하지않아서 발생한 예외일 경우 not present = true 를 전달받고, 이경우인 경우
+// spt에서 해당 주소에 해당하는 페이지가 있는지 확인해서 존재한다면 해당 페이지에 물리 프레임 할당을 요청하는
+// vm_do_claim_page 함수를 호출한다.
+// not_present 가 faulse 인 경우, 물리 프레임이 할당 되어있지만,page fault 가 일어난것이므로
+// read_only page에 write를 한 경우가 된다. 따라서 not_present가 false 인 경우는 예외로 처리..
 bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 						 bool user UNUSED, bool write UNUSED, bool not_present UNUSED)
 {
@@ -237,7 +246,16 @@ vm_do_claim_page(struct page *page)
 	// 가상 주소와 물리 주소를 매핑
 	struct thread *current = thread_current();
 	pml4_set_page(current->pml4, page->va, frame->kva, page->writable);
-
+	// page_oprations 의 swap_in이 호출됨 -> uninit_initailze가 호출되면서 uninit페이지의 초기화가 이루어진다.
+	/*
+	static const struct page_oprations uninit_ops = {
+		.swap_in = uninit_initialize,
+		.swap_out = NULL,
+		.destory = uninit_destory,
+		.type = VM_UNINIT,
+	}*/
+	// 페이지가 실제로 로딩될때 = 첫번째 page fault 가 발생했을떄 호출되는 swap_in은
+	// page_fault 에서 이어지는 vm_do_claim_page 함수에서 호출됨.
 	return swap_in(page, frame->kva); // uninit_initialize
 }
 

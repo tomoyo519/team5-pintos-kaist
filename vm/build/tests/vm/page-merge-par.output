@@ -1,0 +1,86 @@
+c[?7l[2J[0mSeaBIOS (version 1.15.0-1)
+
+
+iPXE (https://ipxe.org) 00:03.0 CA00 PCI2.10 PnP PMM+0138B4A0+012CB4A0 CA00
+Press Ctrl-B to configure iPXE (PCI 00:03.0)...                                                                               
+
+
+Booting from Hard Disk..Kernel command line: -q -f put page-merge-par put child-sort run page-merge-par
+0 ~ 9fc00 1
+100000 ~ 13e0000 1
+Pintos booting with: 
+	base_mem: 0x0 ~ 0x9fc00 (Usable: 639 kB)
+	ext_mem: 0x100000 ~ 0x13e0000 (Usable: 19,328 kB)
+Calibrating timer...  118,169,600 loops/s.
+hd0: unexpected interrupt
+hd0:0: detected 345 sector (172 kB) disk, model "QEMU HARDDISK", serial "QM00001"
+hd0:1: detected 20,160 sector (9 MB) disk, model "QEMU HARDDISK", serial "QM00002"
+hd1: unexpected interrupt
+hd1:0: detected 251 sector (125 kB) disk, model "QEMU HARDDISK", serial "QM00003"
+hd1:1: detected 20,160 sector (9 MB) disk, model "QEMU HARDDISK", serial "QM00004"
+Formatting file system...done.
+Boot complete.
+Putting 'page-merge-par' into the file system...
+Putting 'child-sort' into the file system...
+Executing 'page-merge-par':
+(page-merge-par) begin
+(page-merge-par) init
+(page-merge-par) sort chunk 0
+(page-merge-par) sort chunk 1
+child-sort: exit(-1)
+(page-merge-par) sort chunk 2
+child-sort: exit(-1)
+Kernel PANIC at ../../threads/thread.c:849 in schedule(): assertion `is_thread (next)' failed.
+Call stack: 0x80042196ea 0x800420889f 0x8004208760 0x80042075e2 0x8004209b03 0x8004209de9 0x800421ba17 0x800421bc20 0x800421bc7f 0x800420c1a9 0x800420c295 0x800420d06f 0x800420d2e2 0x800420d4d3 0x800420ddec 0x80042233b0 0x8004223332 0x8004223598 0x800421d34b 0x80042081c2.
+The `backtrace' program can make call stacks useful.
+Read "Backtraces" in the "Debugging Tools" chapter
+of the Pintos documentation for more information.
+Kernel PANIC recursion at ../../threads/thread.c:326 in thread_current().
+Interrupt 0x0d (#GP General Protection Exception) at rip=8004222224
+ cr2=0000000000606b78 error=               0
+rax cccccccccccccccc rbx ffffffffffffffff rcx 0000008004224055 rdx 0000000000000016
+rsp 000000800426cf90 rbp 000000800426cfa0 rsi 0000000000000146 rdi cccccccccccccccc
+rip 0000008004222224 r8 000000800422410d  r9 0000008004219608 r10 0000000000000000
+r11 0000000000000000 r12 0000000000000000 r13 0000000000000000 r14 0000000000000000
+r15 0000000000000000 rflags 00000006
+es: 0010 ds: 0010 cs: 0008 ss: 0010
+Interrupt 0x0d (#GP General Protection Exception) at rip=8004221ce0
+ cr2=0000000000606b78 error=               0
+rax cccccccccccccccc rbx ffffffffffffffff rcx 0000008004228938 rdx 000000000000001f
+rsp 000000800426cd80 rbp 000000800426cd90 rsi 000000000000000a rdi cccccccccccccccc
+rip 0000008004221ce0 r8 0000008004219608  r9 000000800421cf20 r10 0000000000000000
+r11 0000000000000000 r12 0000000000000000 r13 0000000000000000 r14 0000000000000000
+r15 0000000000000000 rflags 00000086
+es: 0010 ds: 0010 cs: 0008 ss: 0010
+Interrupt 0x0d (#GP General Protection Exception) at rip=8004221ce0
+ cr2=0000000000606b78 error=               0
+rax cccccccccccccccc rbx ffffffffffffffff rcx 0000008004228938 rdx 0000000000000028
+rsp 000000800426cb70 rbp 000000800426cb80 rsi 000000000000000a rdi cccccccccccccccc
+rip 0000008004221ce0 r8 0000008004219608  r9 000000800421cf20 r10 0000000000000000
+r11 0000000000000000 r12 0000000000000000 r13 0000000000000000 r14 0000000000000000
+r15 0000000000000000 rflags 00000086
+es: 0010 ds: 0010 cs: 0008 ss: 0010
+Interrupt 0x0d (#GP General Protection Exception) at rip=8004221ce0
+ cr2=0000000000606b78 error=               0
+rax cccccccccccccccc rbx ffffffffffffffff rcx 0000008004228938 rdx 0000000000000031
+rsp 000000800426c960 rbp 000000800426c970 rsi 000000000000000a rdi cccccccccccccccc
+rip 0000008004221ce0 r8 0000008004219608  r9 000000800421cf20 r10 0000000000000000
+r11 0000000000000000 r12 0000000000000000 r13 0000000000000000 r14 0000000000000000
+r15 0000000000000000 rflags 00000086
+es: 0010 ds: 0010 cs: 0008 ss: 0010
+Interrupt 0x0d (#GP General Protection Exception) at rip=8004221ce0
+ cr2=0000000000606b78 error=               0
+rax cccccccccccccccc rbx ffffffffffffffff rcx 0000008004228938 rdx 000000000000003a
+rsp 000000800426c750 rbp 000000800426c760 rsi 000000000000000a rdi cccccccccccccccc
+rip 0000008004221ce0 r8 0000008004219608  r9 000000800421cf20 r10 0000000000000000
+r11 0000000000000000 r12 0000000000000000 r13 0000000000000000 r14 0000000000000000
+r15 0000000000000000 rflags 00000086
+es: 0010 ds: 0010 cs: 0008 ss: 0010
+Interrupt 0x0d (#GP General Protection Exception) at rip=8004221ce0
+ cr2=0000000000606b78 error=               0
+rax cccccccccccccccc rbx ffffffffffffffff rcx 0000008004228938 rdx 0000000000000003
+rsp 000000800426c540 rbp 000000800426c550 rsi 000000000000000a rdi cccccccccccccccc
+rip 0000008004221ce0 r8 0000008004219608  r9 000000800421cf20 r10 0000000000000000
+r11 0000000000000000 r12 0000000000000000 r13 0000000000000000 r14 0000000000000000
+r15 0000000000000000 rflags 00000086
+es: 0010 ds: 0010 cs: 0008 ss: 0010
