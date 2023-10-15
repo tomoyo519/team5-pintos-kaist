@@ -786,7 +786,7 @@ install_page(void *upage, void *kpage, bool writable)
 /* From here, codes will be used after project 3.
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
-
+/*project 3️⃣*/
 struct lazy_load_arg
 {
 	struct file *file;
@@ -794,6 +794,7 @@ struct lazy_load_arg
 	uint32_t read_bytes;
 	uint32_t zero_bytes;
 };
+// 첫번쨰 page fault 가 발생할때 호출됨. 실행파일의 내용을 페이지로 로딩하는 함수.
 static bool
 lazy_load_segment(struct page *page, void *aux)
 {
@@ -830,24 +831,26 @@ lazy_load_segment(struct page *page, void *aux)
  *
  * Return true if successful, false if a memory allocation error
  * or disk read error occurs. */
-
+// 프로세스가 실행될때, 실행파일을 현재 스레드로 로드하는 함수. 파일의 내용을 upage에 로드
 static bool
 load_segment(struct file *file, off_t ofs, uint8_t *upage,
 			 uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
-	ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
-	ASSERT(pg_ofs(upage) == 0);
-	ASSERT(ofs % PGSIZE == 0);
+	ASSERT((read_bytes + zero_bytes) % PGSIZE == 0); // read_bytes + zero_bytes 페이지가 PGSIZE의 배수인가?
+	ASSERT(pg_ofs(upage) == 0);						 // upage 페이지 정렬되어있는지 확인
+	ASSERT(ofs % PGSIZE == 0);						 // ofs가 페이지 정렬 되어있는지 확인
 
-	while (read_bytes > 0 || zero_bytes > 0)
+	while (read_bytes > 0 || zero_bytes > 0) // read_byte, zero_bytes가 0보다 클때 동안 루프
 	{
 		/* Do calculate how to fill this page.
 		 * We will read PAGE_READ_BYTES bytes from FILE
 		 * and zero the final PAGE_ZERO_BYTES bytes. */
-		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE; // 최대로 읽을 수 있는 크기는 PGSIZE
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
+		// 페이지에 내용을 로드할때 사용할 함수와 필요한 인자 넣어주기.
+		//  vm_alloc_page_with initializer 의 4,5 번쨰 인자가 로드할때 사용할 함수, 필요한 인자.
 		struct lazy_load_arg *lazy_load_arg = (struct lazy_load_arg *)malloc(sizeof(struct lazy_load_arg));
 		lazy_load_arg->file = file;					 // 내용이 담긴 파일 객체
 		lazy_load_arg->ofs = ofs;					 // 이 페이지에서 읽기 시작할 위치
@@ -869,17 +872,19 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 }
 
 /* Create a PAGE of stack at the USER_STACK. Return true on success. */
+// stack의 페이지를 생성하는 함수.
 static bool
 setup_stack(struct intr_frame *if_)
 {
 	bool success = false;
+	// 스택은 아래로 성장하기 때문에
 	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 
 	/* TODO: Map the stack on stack_bottom and claim the page immediately.
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
-
+	// stack_bottom에 페이지를 하나 할당받는다.
 	if (vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, 1))
 	// VM_MARKER_0: 스택이 저장된 메모리 페이지임을 식별하기 위해 추가
 	// writable: argument_stack()에서 값을 넣어야 하니 True
