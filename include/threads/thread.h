@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "threads/interrupt.h"
 #include "threads/synch.h" // 추가
+#define VM
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -106,10 +107,10 @@ struct thread {
 	int nice;                           /* nice value of thread */// mlfqs 관련 변경
 	int recent_cpu;                     /* recent_cpu which estimates how much CPU time earned recently */// mlfqs 관련 변경
 
-#ifdef USERPROG
+// #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
-#endif
+// #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
 	struct supplemental_page_table spt;

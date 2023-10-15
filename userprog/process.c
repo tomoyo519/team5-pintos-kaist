@@ -756,6 +756,23 @@ install_page (void *upage, void *kpage, bool writable) {
 
 static bool
 lazy_load_segment (struct page *page, void *aux) {
+
+	struct file_info *f_info = (struct file_info *)aux;
+
+	struct file *file = f_info->file;
+	size_t page_read_bytes = f_info->read_bytes;
+	size_t page_zero_bytes = f_info->zero_bytes;
+	off_t ofs = f_info->ofs;
+
+	file_seek (file, ofs);
+	if(file_read (file, page->frame->kva, page_read_bytes) != (int) page_read_bytes) {
+		palloc_free_page (page->frame->kva);
+		return false;
+	}
+
+	memset (page->frame->kva + page_read_bytes, 0, page_zero_bytes);
+	return true;
+
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
@@ -790,15 +807,21 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
+		struct file_info *f_info = (struct file_info *)calloc(1, sizeof(struct file_info));
+		f_info->file = file;
+		f_info->read_bytes = page_read_bytes;
+		f_info->zero_bytes = page_zero_bytes;
+		f_info->ofs = ofs;
+
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
-					writable, lazy_load_segment, aux))
+					writable, lazy_load_segment, f_info))
 			return false;
 
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+		ofs += page_read_bytes;
 	}
 	return true;
 }
@@ -809,13 +832,19 @@ setup_stack (struct intr_frame *if_) {
 	bool success = false;
 	void *stack_bottom = (void *) (((uint8_t *) USER_STACK) - PGSIZE);
 
-	/* TODO: Map the stack on stack_bottom and claim the page immediately.
-	 * TODO: If success, set the rsp accordingly.
-	 * TODO: You should mark the page is stack. */
-	/* TODO: Your code goes here */
-
+	struct page *new_page;
+	success = vm_alloc_page(VM_ANON, stack_bottom, true );
+	if(success){
+		new_page = spt_find_page(&thread_current()->spt, stack_bottom);
+	}
+	if(new_page != NULL){
+		success = vm_claim_page(stack_bottom);
+		if_->rsp = USER_STACK;
+	}
 	return success;
 }
+
+
 #endif /* VM */
 struct thread * get_child(int pid){
 	struct thread *curr = thread_current(); // 부모 쓰레드

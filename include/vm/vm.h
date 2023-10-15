@@ -48,6 +48,7 @@ struct page {
 
 	/* Your implementation */
 	struct hash_elem h_elem; /* hash elem */
+	bool writable;
 
 	/* 각 유형의 데이터는 이 유니온에 바인딩됩니다.
 	 * 각 함수는 자동으로 현재 유니온을 감지합니다. */
@@ -64,7 +65,6 @@ struct page {
 /* The representation of "frame" */
 struct frame {
 	void *kva;		/* 커널 가상 주소 */
-	struct hash *hash;
 	struct page *page;
 	// 멤버 추가 가능!!
 };
@@ -90,8 +90,12 @@ struct page_operations {
  * 특정 디자인을 강요하고 싶지는 않습니다.
  * 이 구조체에 대한 모든 디자인은 여러분에게 달렸습니다. */
 struct supplemental_page_table {
-	struct hash *hash;
+	struct hash hash;
 };
+
+
+typedef bool (*initializer)(struct page *, enum vm_type, void *kva);
+
 
 #include "threads/thread.h"
 void supplemental_page_table_init (struct supplemental_page_table *spt);

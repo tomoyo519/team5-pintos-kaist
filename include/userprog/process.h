@@ -13,4 +13,12 @@ void process_activate (struct thread *next);
 /* get child */
 struct thread * get_child(int pid);
 
+struct file_info{
+    struct file* file;
+	size_t read_bytes;
+    size_t zero_bytes;
+	off_t ofs;
+
+};
+
 #endif /* userprog/process.h */
