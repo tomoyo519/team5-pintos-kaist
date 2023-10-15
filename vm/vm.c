@@ -7,6 +7,7 @@
 #include "kernel/hash.h"
 #include "threads/thread.h"
 #include "lib/string.h"
+// #include "stdio.h"
 
 
 #include <stdio.h>
@@ -23,8 +24,8 @@ vm_init (void) {
 	pagecache_init ();
 #endif
 	register_inspect_intr ();
-	list_init(&frame_table);           // 수정!
-	start = list_begin(&frame_table);
+	// list_init(&frame_table);           // 수정!
+	// start = list_begin(&frame_table);
 }
 
 /* 페이지 유형을 가져옵니다.
@@ -92,18 +93,20 @@ err:
 /* Find VA from spt and return page. On error, return NULL. */
 struct page *
 spt_find_page (struct supplemental_page_table *spt, void *va) {
-  struct page *page = NULL;
-  /* TODO: Fill this function. */
-  void *page_addr = pg_round_down(va);
+	
+	struct page *page = NULL;
+	void *page_addr = pg_round_down(va);	
+	struct page pg;
+	pg.va = page_addr;
 
-  struct page pg;
-  pg.va = page_addr;
-  struct hash_elem *found = hash_find(&(spt->hash), &(pg.h_elem));
-  if (found == NULL)
-    return NULL;
-  page = hash_entry(found, struct page, h_elem);
+	struct hash_elem *found = hash_find(&(spt->hash), &(pg.h_elem));
 
-  return page;
+	if (found == NULL){
+		return NULL;
+	}
+
+	page = hash_entry(found, struct page, h_elem);	
+	return page;
 
 }
 
@@ -151,23 +154,22 @@ vm_evict_frame (void) {
 static struct frame *
 vm_get_frame (void) {
 	// struct frame *frame = (struct frame *)malloc(sizeof(struct frame));
-  struct frame *frame = NULL;
-  /* TODO: Fill this function. */
-  void *pg_ptr = palloc_get_page(PAL_USER);
-  if (pg_ptr == NULL)
-  {
-    return vm_evict_frame();
-  }
-
-  frame = (struct frame *)malloc(sizeof(struct frame));
-  frame->kva = pg_ptr;
-  frame->page = NULL;
-
-  ASSERT(frame != NULL);
-  ASSERT(frame->page == NULL);
-  return frame;
+	struct frame *frame = NULL;
+	/* TODO: Fill this function. */
+	void *pg_ptr = palloc_get_page(PAL_USER);
+	if (pg_ptr == NULL)
+	{
+	  return vm_evict_frame();
+	}	
+	frame = (struct frame *)malloc(sizeof(struct frame));
+	frame->kva = pg_ptr;
+	frame->page = NULL;	
+	ASSERT(frame != NULL);
+	ASSERT(frame->page == NULL);
+	return frame;
 
 }
+
 
 /* Growing the stack. */
 static void
@@ -212,7 +214,6 @@ vm_claim_page (void *va ) {
 	if(page == NULL){
 		return false;
 	}
-	// printf("@@ stack page found: %p\n", page->va);
 	return vm_do_claim_page (page);
 }
 
@@ -255,15 +256,71 @@ supplemental_page_table_init (struct supplemental_page_table *spt) {
 	hash_init(&spt->hash, do_hashing, hash_compare, NULL);
 }
 
-/* Copy supplemental page table from src to dst */
+void
+hash_copy (struct hash_elem *h_elem, void *aux){
+	
+	
+	// 부모 프로세스의 페이지 중 하나
+	struct page *parent_page = hash_entry (h_elem, struct page, h_elem);
+	if(parent_page == NULL)
+		return false;
+
+	/* process_activate(child_p)이기 때문에 vm_alloc_page 의 spt_find_page의 대상은
+		자식 프로세스의 supplemental_page_table 이다.
+		자식 프로세스에는 어떤 정보(페이지)도 없기 때문에 parent->va 와 일치한 주소에
+		uninit 페이지의 할당 및 hash_insert 후 vm_alloc_page 함수가 return된다.
+	*/
+	// 자식 프로세스에게 unint 페이지 할당
+	if(!vm_alloc_page_with_initializer(VM_ANON, parent_page->va, parent_page->writable, NULL, NULL))
+		return false;
+
+	// uninit 페이지를 물리 메모리에 할당 후, 가상 주소와 물리 주소 매핑
+	if(!vm_claim_page(parent_page->va))
+		return false;
+
+	// 할당된 uninit 페이지 찾기
+	struct page * child_page = spt_find_page(&thread_current()->spt, parent_page->va);
+
+	if(parent_page->frame){
+		// 복사!
+		memcpy(child_page->frame->kva, parent_page->frame->kva, PGSIZE);
+	}
+	return true;
+}
+
+/*
+ * src부터 dst까지 supplemental page table를 복사
+ * 이것은 자식이 부모의 실행 context를 상속할 필요가 있을 때 사용된다.
+ * (예 - fork()). src의 supplemental page table를 반복하면서 dst의 supplemental page table의 엔트리의 정확한 복사본을 만들기
+ * 초기화되지않은(uninit) 페이지를 할당하고 그것들을 바로 요청 하기 = claim
+*/
 bool
-supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
-		struct supplemental_page_table *src UNUSED) {
+supplemental_page_table_copy (struct supplemental_page_table *dst,
+		struct supplemental_page_table *src) {
+
+	hash_apply(&src->hash, hash_copy);
+	return true;
+}
+
+
+void
+destroy_page (struct hash_elem *h_elem, void *aux){
+	struct page* page = hash_entry(h_elem, struct page, h_elem);
+	destroy(page);
 }
 
 /* Free the resource hold by the supplemental page table */
+/*
+ * supplemental page table에 의해 유지되던 모든 자원들을 free
+ * 이 함수는 process가 exit할 때(userprog/process.c의 process_exit()) 호출된다.
+ * 페이지 엔트리를 반복하면서 테이블의 페이지에 destroy(page)를 호출해야 한다.
+ * 이 함수에서 실제 페이지 테이블(pml4)와 물리 주소(palloc된 메모리)에 대해 걱정할 필요가 없다.
+ * supplemental page table이 정리되어지고 나서, 호출자가 그것들을 정리할 것이다.
+*/
 void
-supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
+supplemental_page_table_kill (struct supplemental_page_table *spt) {	
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+	hash_clear(&spt->hash, destroy_page);
+	// hash_destroy(&spt->hash, delete_hash);
 }

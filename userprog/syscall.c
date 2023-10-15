@@ -83,7 +83,7 @@ void check_address(const uint64_t* addr){
 	/* what if the user provides an invalid pointer, a pointer to kernel memory, 
 	 * or a block partially in one of those regions */
 	/* 잘못된 접근인 경우, 프로세스 종료 */
-	if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4, addr) == NULL)
+	if (!is_user_vaddr(addr) || addr == NULL)
 		exit(-1);
 } 
 
@@ -131,7 +131,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		case SYS_EXIT:                   /* Terminate this process. */
 			exit(f->R.rdi);
 			break;    
-		case SYS_FORK:  ;                 /* Clone current process. */
+		case SYS_FORK:                   /* Clone current process. */
 			struct thread *curr = thread_current();
 			memcpy(&curr->parent_if, f, sizeof(struct intr_frame));
 			f->R.rax = fork(f->R.rdi);
