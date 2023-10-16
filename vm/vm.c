@@ -83,6 +83,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		p->writable = writable;
 
 		/* TODO: Insert the page into the spt. */
+		// printf("여기까지 와?\n");
 		return spt_insert_page(spt, p);
 	}
 err:
@@ -171,7 +172,17 @@ vm_get_frame(void)
 static void
 vm_stack_growth(void *addr UNUSED)
 {
-	// fault handler 에서 필요할때 호출하도록 수정하기.
+	// printf("vm_stac-growth 해야햄\n");
+	// 하나 이상의 anonymous 페이지를 할당하여 스택 크기를 늘립니다. 이로써 addr은 faulted 주소(폴트가 발생하는 주소) 에서 유효한 주소가 됩니다.
+	// 페이지를 할당할 때는 주소를 PGSIZE 기준으로 내림하세요.
+	// void *new_page = vm_get_frame();
+	// if (new_page == NULL)
+	// {
+	// 	return false;
+	// }
+	// pml4_set_page(thread_current()->pml4, addr, new_page, 1);
+	// // fault handler 에서 필요할때 호출하도록 수정하기.
+	return vm_alloc_page(VM_ANON, addr, 1);
 }
 
 /* Handle the fault on write_protected page */
@@ -188,6 +199,12 @@ vm_handle_wp(struct page *page UNUSED)
 // vm_do_claim_page 함수를 호출한다.
 // not_present 가 faulse 인 경우, 물리 프레임이 할당 되어있지만,page fault 가 일어난것이므로
 // read_only page에 write를 한 경우가 된다. 따라서 not_present가 false 인 경우는 예외로 처리..
+// 인자 f = 페이지폴트 혹은 시스템 콜 발생시, 그 순간의 레지스터를 담고있는 구조체
+// addr: 페이지 폴트 일으킨 가상 주소, user: 해당값이 true일때, 현재 쓰레드가 유저모드에서 돌아가다가 페이지 폴트를 일으킴. 현재 쓰레드의 rsp가 유저영역인지 커널영역인지
+// write : true 일경우, 해당 해당 페이지 폴트가 쓰기요청이구, 그렇지 않은 경우 읽기요청
+// not-present : false인 경우, readonly 페이지에 쓰기하려는 상황
+
+// 이 함수는 페이지 폴트가 발생한 가상 주소 및 인자들이 유효한지 체크하고, stack growth 하
 bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 						 bool user UNUSED, bool write UNUSED, bool not_present UNUSED)
 {
@@ -199,6 +216,18 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	if (is_kernel_vaddr(addr))
 		return false;
 
+	// 접근하려는 주소가 현재 스택 포인터보다 아래 있고, 그 차이가 한 페이지 내라면, 스택증가.
+	// printf("🥰%d %d \n", addr, f->rsp);
+	// if (addr != f->rsp)
+	if (addr == f->rsp && addr < USER_STACK && USER_STACK - (1 << 20) < addr)
+	{
+		// addr = rsp임.
+		//  stack growth
+		// printf("조건 드루와\n");
+		vm_stack_growth(pg_round_down(addr));
+		// return true;
+	}
+
 	if (not_present) // 접근한 메모리의 physical page가 존재하지 않은 경우
 	{
 		/* TODO: Validate the fault */
@@ -207,19 +236,11 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 			return false;
 		if (write == 1 && page->writable == 0) // write 불가능한 페이지에 write 요청한 경우
 			return false;
+
 		return vm_do_claim_page(page);
 	}
-	// 접근하려는 주소가 현재 스택 포인터보다 아래 있고, 그 차이가 한 페이지 내라면, 스택증가.
-	if (addr < f->rsp && f->rsp - addr < PGSIZE){
-		//stack growth
-		void *new_page = vm_get_frame();
-		if(new_page == NULL){
-			return false;
-		}
-		install_page(((uint8_t *)pg_round_down(fault_addr)), new_page, true);
-	}
 
-		return false;
+	return false;
 }
 /* Free the page.
  * DO NOT MODIFY THIS FUNCTION. */

@@ -1,9 +1,9 @@
- {
- "configurations": [
+{
+  "configurations": [
     {
       "type": "gdb",
       "request": "attach",
-      "name": "Attach to gdbserver : threads",
+      "name": "GDB",
       "executable": "${workspaceRoot}/vm/build/kernel.o",
       "target": "localhost:1234",
       "remote": true,
