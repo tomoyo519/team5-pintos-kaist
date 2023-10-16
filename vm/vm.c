@@ -5,6 +5,7 @@
 #include "threads/mmu.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
+#include "hash.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -79,7 +80,6 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		// uninit_new를 호출해 "uninit" 페이지 구조체를 생성하세요.
 		uninit_new(p, upage, init, type, aux, page_initializer);
 		// uninit_new를 호출한 후에는 필드를 수정해야 합니다.
-		// 🚨 Todo : 뭘 수정해야 하지?
 		p->writable = writable;
 
 		/* TODO: Insert the page into the spt. */
@@ -102,7 +102,6 @@ spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 	// va에 해당하는 hash_elem 찾기
 	page->va = pg_round_down(va); // page의 시작 주소 할당
 	e = hash_find(&spt->spt_hash, &page->hash_elem);
-	// TODO
 	free(page);
 
 	// 있으면 e에 해당하는 페이지 반환
@@ -172,6 +171,7 @@ vm_get_frame(void)
 static void
 vm_stack_growth(void *addr UNUSED)
 {
+	// fault handler 에서 필요할때 호출하도록 수정하기.
 }
 
 /* Handle the fault on write_protected page */
@@ -209,7 +209,17 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 			return false;
 		return vm_do_claim_page(page);
 	}
-	return false;
+	// 접근하려는 주소가 현재 스택 포인터보다 아래 있고, 그 차이가 한 페이지 내라면, 스택증가.
+	if (addr < f->rsp && f->rsp - addr < PGSIZE){
+		//stack growth
+		void *new_page = vm_get_frame();
+		if(new_page == NULL){
+			return false;
+		}
+		install_page(((uint8_t *)pg_round_down(fault_addr)), new_page, true);
+	}
+
+		return false;
 }
 /* Free the page.
  * DO NOT MODIFY THIS FUNCTION. */
@@ -284,6 +294,15 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
 }
 
 /* Copy supplemental page table from src to dst */
+// 부모프로세스가 가지고있는 본인의 spt 정보를 빠짐없이 자식 프로세스에게 복사해줌. fork 시스템콜
+// spt iteration 해주기.
+// iter 돌때마다 해당 hash_elem 과 연결된 page를 찾아서 해당 페이지 구조체의 정보들을 저장함.
+// vm_initializer..함수의 인자 참고
+// 부모 페이지의 정보를 저장한뒤 자식이 가질 새로운 페이지 생성.
+// 생성 위해서 부모 페이지의 타입 먼저 검사. 부모 페이지가 UNINIT페이지인 경우와 그렇지 않은 경우 ->
+// UNINIT아닌 경우, setup_sstack에서 했던것처럼 페이지를 생성한 뒤 바로 해당 페이지의 타입에 맞는 Initializer 호출., 그리고나서 부모의 물리 페이지 정보를 자식에게도 복사.
+// 모든 함수가 정상적으로 되었다면 return true;
+
 // SPT를 복사하는 함수 (자식 프로세스가 부모 프로세스의 실행 컨텍스트를 상속해야 할 때 (즉, fork() 시스템 호출이 사용될 때) 사용)
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED)
@@ -291,42 +310,56 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 	// TODO: 보조 페이지 테이블을 src에서 dst로 복사합니다.
 	// TODO: src의 각 페이지를 순회하고 dst에 해당 entry의 사본을 만듭니다.
 	// TODO: uninit page를 할당하고 그것을 즉시 claim해야 합니다.
+	// src로부터 dst보조테이블을 복사한다.
 	struct hash_iterator i;
+
 	hash_first(&i, &src->spt_hash);
 	while (hash_next(&i))
 	{
-		// src_page 정보
-		struct page *src_page = hash_entry(hash_cur(&i), struct page, hash_elem);
-		enum vm_type type = src_page->operations->type;
-		void *upage = src_page->va;
-		bool writable = src_page->writable;
+		// enum vm_type type, void *upage, bool writable,
+		// vm_initializer *init, void *aux
+		struct page *p = hash_entry(hash_cur(&i), struct page, hash_elem);
+		enum vm_type type = p->operations->type;
+		void *upage = p->va;
+		bool writable = p->writable;
+		vm_initializer *init = p->uninit.init;
+		void *aux = p->uninit.aux;
 
-		/* 1) type이 uninit이면 */
+		// bool (*page_initializer)(struct page *, enum vm_type, void *);
 		if (type == VM_UNINIT)
-		{ // uninit page 생성 & 초기화
-			vm_initializer *init = src_page->uninit.init;
-			void *aux = src_page->uninit.aux;
+		// 부모 페이지가 초기화가 안된경우,
+		{
 			vm_alloc_page_with_initializer(VM_ANON, upage, writable, init, aux);
+			// 왜요 ? 부모가 초기화가 안된 상태, 초기화를 해주고 다시 continue 해서 반복문 돌고, 다시 부모정보를 받아와서
+			//  밑에서 초기화가 된 상태로 else 를 지나서 자식에게 복사가 된다.
+			// 다시 위로 올라감.
 			continue;
 		}
 
-		/* 2) type이 uninit이 아니면 */
-		if (!vm_alloc_page_with_initializer(type, upage, writable, NULL, NULL)) // uninit page 생성 & 초기화
-			// init(lazy_load_segment)는 page_fault가 발생할때 호출됨
-			// 지금 만드는 페이지는 page_fault가 일어날 때까지 기다리지 않고 바로 내용을 넣어줘야 하므로 필요 없음
+		// 부모의 페이지가 초기화가 된 경우,
+		//  자식의 페이지를 생성.
+		if (!vm_alloc_page(type, upage, writable))
+		{
 			return false;
-
-		// vm_claim_page으로 요청해서 매핑 & 페이지 타입에 맞게 초기화
+		}
 		if (!vm_claim_page(upage))
+		// 자식페이지를 물리주소랑 맵핑.
+		{
 			return false;
-
-		// 매핑된 프레임에 내용 로딩
-		struct page *dst_page = spt_find_page(dst, upage);
-		memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
+		}
+		// src에서 복사해서 dst로 옮기는것.
+		struct page *child_page = spt_find_page(dst, upage); // dst 보조테이블에서 현재 복사할 가상주소 upage에 해당하는 자식페이지를 찾음
+		memcpy(child_page->frame->kva, p->frame->kva, PGSIZE);
 	}
 	return true;
 }
 
+void hash_page_destroy(struct hash_elem *e, void *aux)
+{
+	struct page *page = hash_entry(e, struct page, hash_elem);
+	destroy(page);
+	free(page);
+}
 /* Free the resource hold by the supplemental page table */
 // SPT가 보유하고 있던 모든 리소스를 해제하는 함수 (process_exit(), process_cleanup()에서 호출)
 void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
@@ -344,11 +377,6 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
 	 */
 
 	// todo🚨: 모든 수정된 내용을 스토리지에 기록
-}
-
-void hash_page_destroy(struct hash_elem *e, void *aux)
-{
-	struct page *page = hash_entry(e, struct page, hash_elem);
-	destroy(page);
-	free(page);
+	hash_clear(&spt->spt_hash, hash_page_destroy);
+	// 끝? ㅇㅇ
 }
