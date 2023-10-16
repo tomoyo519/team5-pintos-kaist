@@ -831,15 +831,18 @@ static bool
 setup_stack (struct intr_frame *if_) {
 	bool success = false;
 	void *stack_bottom = (void *) (((uint8_t *) USER_STACK) - PGSIZE);
-
+	struct thread *curr = thread_current();
+	
 	struct page *new_page;
-	success = vm_alloc_page(VM_ANON, stack_bottom, true );
+	success = vm_alloc_page(VM_ANON && VM_MARKER_0, stack_bottom, true );
 	if(success){
-		new_page = spt_find_page(&thread_current()->spt, stack_bottom);
+		new_page = spt_find_page(&curr->spt, stack_bottom);
 	}
 	if(new_page != NULL){
 		success = vm_claim_page(stack_bottom);
 		if_->rsp = USER_STACK;
+		// curr->stack_bottom = stack_bottom;
+
 	}
 	return success;
 }

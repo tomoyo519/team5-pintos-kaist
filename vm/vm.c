@@ -7,8 +7,6 @@
 #include "kernel/hash.h"
 #include "threads/thread.h"
 #include "lib/string.h"
-// #include "stdio.h"
-
 
 #include <stdio.h>
 static struct list frame_table;
@@ -173,7 +171,11 @@ vm_get_frame (void) {
 
 /* Growing the stack. */
 static void
-vm_stack_growth (void *addr UNUSED) {
+vm_stack_growth (void *addr) {
+	// 크기 제한 : 최대 1MB
+	// 하나 이상의 anonymous 페이지를 할당해 스택 크기 증가
+	vm_alloc_page(VM_ANON, addr, true);
+	// curr->stack_bottom = new_stack;	// void *page_addr = pg_round_down(va);	
 }
 
 /* Handle the fault on write_protected page */
@@ -184,16 +186,35 @@ vm_handle_wp (struct page *page UNUSED) {
 /* Return true on success */
 bool
 vm_try_handle_fault (struct intr_frame *f, void *addr,
-		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-	struct supplemental_page_table *spt = &thread_current ()->spt;
-	
-	/* TODO: Validate the fault */
-	/* TODO: Your code goes here */
-	struct page *page = spt_find_page(spt, addr);
-	if(page == NULL){
+		bool user, bool write UNUSED, bool not_present UNUSED) {
+
+	// 유효한 주소인지 확인
+	if(!is_user_vaddr(addr)){
 		return false;
 	}
-	return vm_do_claim_page (page);
+	// stack 에 대한 접근인지 확인하기
+	if(f->rsp == addr && addr < USER_STACK && addr > USER_STACK - (1 << 20)){
+
+		vm_stack_growth(pg_round_down(addr));
+	}
+
+	struct supplemental_page_table *spt = &thread_current ()->spt;
+
+	// 접근한 메모리가 물리 페이지에 맵핑되지 않은 경우 || read-only 페이지(커널 영역?)에 write를 하려는 상황 (읽/쓰 가능 == Ture | 읽만 가능 == False)
+	if(not_present){
+
+		struct page *page = spt_find_page(spt, addr);
+		if(!page)
+			return false;
+
+		// write 를 시도하지만,,, 하지만 그 페이지는 롸이트 할 수 없었다...
+		if(write && !page->writable)
+			return false;
+
+		return vm_do_claim_page (page);
+	}
+	return false;
+
 }
 
 /* Free the page.
@@ -225,6 +246,9 @@ vm_do_claim_page (struct page *page) {
 	ASSERT(frame && frame->kva)
 	/* Set links */
 
+	if(!page || page->frame){
+		return false;
+	}
 	frame->page = page;
 	page->frame = frame;
 

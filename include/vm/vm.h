@@ -49,6 +49,7 @@ struct page {
 	/* Your implementation */
 	struct hash_elem h_elem; /* hash elem */
 	bool writable;
+	bool is_stack;
 
 	/* 각 유형의 데이터는 이 유니온에 바인딩됩니다.
 	 * 각 함수는 자동으로 현재 유니온을 감지합니다. */
