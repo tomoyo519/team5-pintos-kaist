@@ -11,11 +11,12 @@
 /* 추가해준 헤더 파일들 */
 #include "filesys/filesys.h"
 #include "filesys/file.h"
-#include <list.h>
+// #include <list.h>
 #include "threads/palloc.h"
-#include "threads/vaddr.h"
+// #include "threads/vaddr.h"
 #include "userprog/process.h"
 #include "threads/synch.h"
+// #include "vm/vm.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -179,6 +180,9 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_DUP2:
 		f->R.rax = dup2(f->R.rdi, f->R.rsi);
 		break;
+	case SYS_MMAP:
+		// TODO - 인자추가
+		f->R.rax = call_mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
 	default: /* call thread_exit() ? */
 		exit(-1);
 		break;
@@ -429,4 +433,38 @@ int dup2(int oldfd, int newfd)
 	close(newfd);
 	curr_fd_table[newfd] = f;
 	return newfd;
+}
+
+void *call_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
+{
+
+	if (offset % PGSIZE != 0)
+	{
+		return NULL;
+	}
+	if (is_kernel_vaddr(addr))
+	{
+		return NULL;
+	}
+	if (length <= 0)
+	{
+		return NULL;
+	}
+	struct supplemental_page_table *spt = &thread_current()->spt;
+	// 다른 애가 이미 쓰고있으면 안되니까!!!
+	if (!spt_find_page(spt, addr))
+	{
+		return NULL;
+	}
+	struct file *f = process_get_file(fd);
+	if (f == NULL)
+	{
+		return NULL;
+	}
+	if (f == STDOUT)
+	{
+		return NULL;
+	}
+	// 왜인자가 fd가 아니라 f 아님 ? d0Map은 파일을 인자로 받기 때문에,,
+	return do_mmap(addr, length, writable, f, offset);
 }

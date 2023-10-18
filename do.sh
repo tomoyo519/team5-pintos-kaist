@@ -147,4 +147,4 @@ make
 cd build
 source ../../activate
 
-$PT_GROW_STACK
+$MMAP_READ

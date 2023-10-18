@@ -63,6 +63,9 @@ struct page
 		struct page_cache page_cache;
 #endif
 	};
+
+	//TODO - 해시링크, linked list  도 가능..
+	struct list lru_list;
 };
 
 /* The representation of "frame" */

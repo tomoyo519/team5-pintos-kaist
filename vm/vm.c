@@ -96,7 +96,6 @@ struct page *
 spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 {
 	struct page *page = NULL;
-	/* TODO: Fill this function. */
 	page = (struct page *)malloc(sizeof(struct page));
 	struct hash_elem *e;
 
