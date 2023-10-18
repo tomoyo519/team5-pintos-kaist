@@ -55,8 +55,6 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 	/* Check wheter the upage is already occupied or not. */
-	// struct page *new_page;
-	//  vm_initializer *init;
 	if (spt_find_page (spt, upage) == NULL) {
 		// initializer
 		initializer *page_init = NULL;
@@ -72,16 +70,11 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			break;
 		}
 
-		/* TODO: 페이지를 생성하고 VM 유형에 따라 초기화자를 가져온 다음
-		 * uninit_new를 호출하여 "uninit" 페이지 구조체를 만드십시오.
-		 * uninit_new를 호출한 후 필드를 수정해야 합니다. */
-		
 		struct page *new_page = (struct page *)calloc(1, sizeof(struct page));
 
 		uninit_new (new_page, upage, init, type, aux, page_init);
 		new_page->writable = writable;
 
-		/* TODO: 페이지를 spt에 삽입하십시오. */
 		return spt_insert_page(spt, new_page);
 	}
 err:
@@ -151,9 +144,9 @@ vm_evict_frame (void) {
  * 이 함수는 사용 가능한 메모리 공간을 얻기 위해 프레임을 제거합니다. */
 static struct frame *
 vm_get_frame (void) {
-	// struct frame *frame = (struct frame *)malloc(sizeof(struct frame));
+
 	struct frame *frame = NULL;
-	/* TODO: Fill this function. */
+
 	void *pg_ptr = palloc_get_page(PAL_USER);
 	if (pg_ptr == NULL)
 	{
@@ -161,9 +154,11 @@ vm_get_frame (void) {
 	}	
 	frame = (struct frame *)malloc(sizeof(struct frame));
 	frame->kva = pg_ptr;
-	frame->page = NULL;	
+	frame->page = NULL;
+
 	ASSERT(frame != NULL);
 	ASSERT(frame->page == NULL);
+	
 	return frame;
 
 }
@@ -189,7 +184,7 @@ vm_try_handle_fault (struct intr_frame *f, void *addr,
 		bool user, bool write UNUSED, bool not_present UNUSED) {
 
 	// 유효한 주소인지 확인
-	if(!is_user_vaddr(addr)){
+	if(is_kernel_vaddr(addr)){
 		return false;
 	}
 	// stack 에 대한 접근인지 확인하기
@@ -244,21 +239,20 @@ vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
 
 	ASSERT(frame && frame->kva)
-	/* Set links */
 
 	if(!page || page->frame){
 		return false;
 	}
+
+	/* Set links */
 	frame->page = page;
 	page->frame = frame;
 
-	if(pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable)){
+	if(!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable))
+		return false;
 		
-		return swap_in (page, frame->kva);
-	}
-	return false;
+	return swap_in (page, frame->kva);
 
-	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 }
 // # include "mmu.h"
 bool

@@ -260,7 +260,12 @@ int filesize (int fd){
 
 /* 수정완료 */
 int read (int fd, void *buffer, unsigned size){
+
 	check_address(buffer);
+	uint64_t *pte = pml4e_walk(thread_current()->pml4, buffer, 0);
+	if(*pte && !is_writable(pte)){
+		exit(-1);
+	}
 	unsigned char *buf = buffer;
 	int readsize;
 	struct thread *curr = thread_current();

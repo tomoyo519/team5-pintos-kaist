@@ -834,7 +834,7 @@ setup_stack (struct intr_frame *if_) {
 	struct thread *curr = thread_current();
 	
 	struct page *new_page;
-	success = vm_alloc_page(VM_ANON && VM_MARKER_0, stack_bottom, true );
+	success = vm_alloc_page(VM_ANON, stack_bottom, true );
 	if(success){
 		new_page = spt_find_page(&curr->spt, stack_bottom);
 	}

@@ -113,6 +113,9 @@ struct thread {
 // #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
+	// struct hash vm;
+	// uint8_t stack_bottom;
+	// uint8_t curr_rsp;
 	struct supplemental_page_table spt;
 #endif
 
