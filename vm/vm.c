@@ -51,6 +51,8 @@ static struct frame *vm_evict_frame (void);
 bool
 vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		vm_initializer *init, void *aux) {
+			// printf()
+
 	ASSERT (VM_TYPE(type) != VM_UNINIT)
 
 	struct supplemental_page_table *spt = &thread_current ()->spt;
@@ -113,6 +115,7 @@ spt_insert_page (struct supplemental_page_table *spt, struct page *page) {
 
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
+	hash_delete(&spt->hash, &page->h_elem);
 	vm_dealloc_page (page);
 	return true;
 }
@@ -167,10 +170,9 @@ vm_get_frame (void) {
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr) {
-	// 크기 제한 : 최대 1MB
 	// 하나 이상의 anonymous 페이지를 할당해 스택 크기 증가
 	vm_alloc_page(VM_ANON, addr, true);
-	// curr->stack_bottom = new_stack;	// void *page_addr = pg_round_down(va);	
+	vm_claim_page(addr);
 }
 
 /* Handle the fault on write_protected page */
@@ -184,27 +186,35 @@ vm_try_handle_fault (struct intr_frame *f, void *addr,
 		bool user, bool write UNUSED, bool not_present UNUSED) {
 
 	// 유효한 주소인지 확인
-	if(is_kernel_vaddr(addr)){
+	if(is_kernel_vaddr(addr))
 		return false;
-	}
-	// stack 에 대한 접근인지 확인하기
-	if(f->rsp == addr && addr < USER_STACK && addr > USER_STACK - (1 << 20)){
-
-		vm_stack_growth(pg_round_down(addr));
-	}
-
+	
 	struct supplemental_page_table *spt = &thread_current ()->spt;
+	struct page *page = NULL;
 
-	// 접근한 메모리가 물리 페이지에 맵핑되지 않은 경우 || read-only 페이지(커널 영역?)에 write를 하려는 상황 (읽/쓰 가능 == Ture | 읽만 가능 == False)
 	if(not_present){
+		page = spt_find_page(spt, addr);
 
-		struct page *page = spt_find_page(spt, addr);
-		if(!page)
+		if(!page){
+			// 사용자 모드 : f->rsp // 커널 모드 : 현재 실행중인 스레드의 rsp
+			// 사용자 모드와 커널 모드의 rsp 는 서로 다름
+			void*rsp = (void *)user ? f->rsp : thread_current()->curr_rsp;
+
+			//  1MB, rsp-8 <= fault난 가상주소 < USER_STACK
+			// stack 에 대한 접근인지 확인하기
+			if(addr < USER_STACK && addr >= USER_STACK - (1 << 20) && addr>=rsp-8){
+
+				vm_stack_growth(pg_round_down(addr));
+				return true;
+			}
+			return false;
+		}
+		// write 를 시도하지만, 페이지에는 write 할 수 없음
+		if(write && !page->writable){
+			// printf("  ERROR??  \n");
 			return false;
 
-		// write 를 시도하지만,,, 하지만 그 페이지는 롸이트 할 수 없었다...
-		if(write && !page->writable)
-			return false;
+		}
 
 		return vm_do_claim_page (page);
 	}
@@ -276,8 +286,6 @@ supplemental_page_table_init (struct supplemental_page_table *spt) {
 
 void
 hash_copy (struct hash_elem *h_elem, void *aux){
-	
-	
 	// 부모 프로세스의 페이지 중 하나
 	struct page *parent_page = hash_entry (h_elem, struct page, h_elem);
 	if(parent_page == NULL)
@@ -313,10 +321,40 @@ hash_copy (struct hash_elem *h_elem, void *aux){
  * 초기화되지않은(uninit) 페이지를 할당하고 그것들을 바로 요청 하기 = claim
 */
 bool
-supplemental_page_table_copy (struct supplemental_page_table *dst,
-		struct supplemental_page_table *src) {
+supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
+	struct supplemental_page_table *src UNUSED) {
 
-	hash_apply(&src->hash, hash_copy);
+	struct hash_iterator src_iter;
+
+	// hash_apply()
+	hash_first(&src_iter, &src->hash);
+
+	while (hash_next(&src_iter)) {
+		struct page *src_page = hash_entry(hash_cur(&src_iter), struct page, h_elem);
+		
+		enum vm_type type= src_page->operations->type;
+		void *upage = src_page->va;
+		bool writable = src_page->writable;
+		
+		if (type == VM_UNINIT) {
+			vm_alloc_page_with_initializer(VM_ANON, upage, writable, src_page->uninit.init, src_page->uninit.aux);
+			continue;	
+		}
+		
+		// 자식에게 새 페이지를 할당
+		// 어차피 ANON으로 만들어주니까 init, aux NULL, NULL
+		if (!vm_alloc_page(VM_ANON, upage, writable))
+			return false;
+		
+		if (!vm_claim_page(upage))
+			return false;
+
+		struct page *dst_page = spt_find_page(dst, upage);
+
+		// 페이지 정보 복사
+		if(src_page->frame)
+			memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
+	}
 	return true;
 }
 
@@ -340,5 +378,5 @@ supplemental_page_table_kill (struct supplemental_page_table *spt) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
 	hash_clear(&spt->hash, destroy_page);
-	// hash_destroy(&spt->hash, delete_hash);
+	// hash_destroy(&spt->spt_hash, spt_destructor);
 }
