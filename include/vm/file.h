@@ -6,12 +6,22 @@
 struct page;
 enum vm_type;
 
-struct file_page {
+struct file_page
+{
+	struct file *file;
+	off_t ofs;
+	size_t length;
+	uint32_t read_bytes;
+	uint32_t zero_bytes;
 };
 
-void vm_file_init (void);
-bool file_backed_initializer (struct page *page, enum vm_type type, void *kva);
+void vm_file_init(void);
+bool file_backed_initializer(struct page *page, enum vm_type type, void *kva);
 void *do_mmap(void *addr, size_t length, int writable,
-		struct file *file, off_t offset);
-void do_munmap (void *va);
+			  struct file *file, off_t offset);
+void do_munmap(void *va);
 #endif
+
+//swap
+//frame list.. 죽일 struce frame fifo. 주소 끊어내고, 프레임을 null로 바꾸고
+//프레임은 쥬금.

@@ -16,7 +16,7 @@
 // #include "threads/vaddr.h"
 #include "userprog/process.h"
 #include "threads/synch.h"
-// #include "vm/vm.h"
+#include "vm/vm.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -43,7 +43,7 @@ void check_address(const uint64_t *);
 static struct file *process_get_file(int fd);
 int process_add_file(struct file *file);
 void process_close_file(int fd);
-
+void *call_mmap(void *, size_t, int, int, off_t);
 /* Project2-extra */
 const int STDIN = 1;
 const int STDOUT = 2;
@@ -181,10 +181,13 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		f->R.rax = dup2(f->R.rdi, f->R.rsi);
 		break;
 	case SYS_MMAP:
-		// TODO - 인자추가
 		f->R.rax = call_mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+		break;
+	case SYS_MUNMAP:
+		munmap(f->R.rdi);
+		break;
 	default: /* call thread_exit() ? */
-		exit(-1);
+		thread_exit();
 		break;
 	}
 	// printf ("system call!\n");
@@ -266,6 +269,7 @@ int open(const char *file)
 	if (fd == -1)
 		file_close(f);
 	lock_release(&filesys_lock);
+
 	return fd;
 }
 
@@ -438,24 +442,18 @@ int dup2(int oldfd, int newfd)
 void *call_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 {
 
-	if (offset % PGSIZE != 0)
+	if (offset % PGSIZE != 0 || is_kernel_vaddr(addr) || (long long)length <= 0 || !addr || pg_round_down(addr) != addr)
 	{
 		return NULL;
 	}
-	if (is_kernel_vaddr(addr))
-	{
-		return NULL;
-	}
-	if (length <= 0)
-	{
-		return NULL;
-	}
+
 	struct supplemental_page_table *spt = &thread_current()->spt;
 	// 다른 애가 이미 쓰고있으면 안되니까!!!
-	if (!spt_find_page(spt, addr))
+	if (spt_find_page(spt, addr))
 	{
 		return NULL;
 	}
+
 	struct file *f = process_get_file(fd);
 	if (f == NULL)
 	{
@@ -465,6 +463,13 @@ void *call_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	{
 		return NULL;
 	}
+
 	// 왜인자가 fd가 아니라 f 아님 ? d0Map은 파일을 인자로 받기 때문에,,
+
 	return do_mmap(addr, length, writable, f, offset);
+}
+
+void munmap(void *addr)
+{
+	do_munmap(addr);
 }

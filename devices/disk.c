@@ -180,6 +180,15 @@ disk_print_stats (void) {
 0:0 - boot loader, command line args, and operating system kernel
 0:1 - file system
 1:0 - scratch
+swap 공간으로 활용. 1섹터 = 512 바이트. 한페이지 = 8섹터.
+섹터단위로 끊어서 저장하기,
+디스크 빈공간 체크 = swap_table.. 비트맵으로 구현
+비트로 되어있는 맵. 사용한곳은 트루 아니면 0
+비트맵 스캔
+사용한 공간 체크. 반환하면 체크 해지.
+디스크의 특정 섹터에 메모리 사용여부를 체크해놓는것
+
+페이지는 내가 저장한 시작 섹터를 가지고있어야 함. 1부터 8섹터까지 쓰겠지?
 1:1 - swap
 */
 struct disk *
