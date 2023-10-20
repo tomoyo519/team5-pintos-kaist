@@ -1,0 +1,13 @@
+FAIL
+Kernel panic in run: PANIC at ../../vm/vm.c:164 in vm_get_frame(): todo
+Call stack: 0x80042196ea 0x800422319d 0x80042234a6 0x80042233cf 0x800421e916 0x8004209991 0x8004209de9 0x400c3f 0x400c8f
+Translation of call stack:
+0x00000080042196ea: debug_panic (lib/kernel/debug.c:32)
+0x000000800422319d: vm_get_frame (vm/vm.c:166)
+0x00000080042234a6: vm_do_claim_page (vm/vm.c:274)
+0x00000080042233cf: vm_try_handle_fault (vm/vm.c:244)
+0x000000800421e916: page_fault (userprog/exception.c:147)
+0x0000008004209991: intr_handler (threads/interrupt.c:353)
+0x0000008004209de9: intr_entry (intr-stubs.o:?)
+0x0000000000400c3f: (unknown)
+0x0000000000400c8f: (unknown)

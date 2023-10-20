@@ -134,6 +134,11 @@ vm_get_victim(void)
 
 /* Evict one page and return the corresponding frame.
  * Return NULL on error.*/
+//페이지를 배신..하고 다른데 가서 달라붙음.
+// palloc 해서 NULL 이 나오는 경우, 다른 프레임 떼와서 붙여주기.
+// 전\체프레임 frame list, elem 으로 연결관리
+// swap table 은 anony에만 필요.
+// file은 
 static struct frame *
 vm_evict_frame(void)
 {
@@ -378,6 +383,7 @@ void hash_page_destroy(struct hash_elem *e, void *aux)
 {
 	struct page *page = hash_entry(e, struct page, hash_elem);
 	destroy(page);
+	// TODO - 지우면 에러 헤결 
 	free(page);
 }
 /* Free the resource hold by the supplemental page table */
