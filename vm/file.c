@@ -29,8 +29,6 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 	page->operations = &file_ops;
 
 	struct file_page *file_page = &page->file;
-	//memcpy
-	// page->file = *file_page;
 }
 
 /* Swap in the page by read contents from the file. */
@@ -62,16 +60,14 @@ lazy_load_file (struct page *page, void *aux) {
 	size_t page_zero_bytes = f_info->zero_bytes;
 	off_t ofs = f_info->ofs;
 
-	// file_seek (file, ofs);
 	file_read_at(file, page->frame->kva,page_read_bytes, ofs);
-	// file_read (file, page->frame->kva, page_read_bytes);
 	memset (page->frame->kva + page_read_bytes, 0, page_zero_bytes);
 
+	/* 디스크에서 읽어온 파일 기반 페이지 */
 	page->file.file = file;
 	page->file.read_bytes = page_read_bytes;
 	page->file.ofs = ofs;
 	page->file.pg_cnt = f_info->pg_cnt;
-	// printf("\n\n  @@@@ page_read_bytes:%d , zero_bytes:%d, offset:%d \n\n", page_read_bytes,page_zero_bytes,ofs  );
 	return true;
 }
 
@@ -83,13 +79,12 @@ do_mmap (void *addr, size_t length, int writable,
 	// 외부에서 file 을 close 할 경우 대비
 	struct file *reopen_file = file_reopen(file);
 
-	ASSERT (offset % PGSIZE == 0);
-
-	void * address = addr;
+	void * origin_addr = addr;
 
 	// 할당받아야 할 페이지 개수
 	int pg_cnt = length % PGSIZE != 0 ? (int)(length/PGSIZE) + 1 : (int)(length/PGSIZE);
 
+	// length : 읽어야할 길이 = 할당받아야할 메모리
 	while(length > 0) {
 		size_t page_read_bytes = length < PGSIZE ? length : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
@@ -100,86 +95,55 @@ do_mmap (void *addr, size_t length, int writable,
 		f_info->zero_bytes = page_zero_bytes;
 		f_info->pg_cnt = pg_cnt;
 		f_info->ofs = offset;
-		f_info->writable = writable;
 		
+		// 파일을 기반으로 한 페이지 또한 lazy 하게 물리메모리에 load
 		if (!vm_alloc_page_with_initializer (VM_FILE, addr, writable, lazy_load_file, f_info)){
 			free(f_info);
 			return false;
 		}
 
-		/* Advance. */
 		length -= page_read_bytes;
 		addr += PGSIZE;
 		offset += page_read_bytes;
-
 	}
-	return address;
+	return origin_addr;
 }
 
-/* Do the munmap */
 void
 do_munmap (void *addr) {
 	struct thread * curr = thread_current();
 	
 	struct page *page;
-	
 	page = spt_find_page(&curr->spt, addr);
-
-	struct file_page *f_page = &page->file;
 
 	struct file * file = page->file.file;
 	
 	// 페이지 찾기
 	int pg_cnt = page->file.pg_cnt;
-	printf("\n @@@ page_cnt :::: %d\n\n", pg_cnt);
-	// printf("\n\n  @@@@ page_read_bytes:%d , pg_cnt:%d, offset:%d \n\n", f_page->read_bytes,f_page->pg_cnt,f_page->ofs  );
-	// printf(" @@@ 페이지 수 : %d  , @@@ 주소 : %p\n", pg_cnt, addr);
-
 	while(pg_cnt > 0){
 		page = spt_find_page(&curr->spt, addr);
 
-		if(page == NULL){
-			// printf("NO PAGE !!\n");
+		if(page == NULL)
 			break;
-		}
-
-		f_page = &page->file;
-		size_t read_bytes = f_page->read_bytes;
-		off_t ofs = f_page->ofs;
-		// printf("\n---- (read_bytes : %d) , (ofs : %d)\n", read_bytes, ofs);
-		// printf("\n---- (addr : %p) , (pg_cnt : %d)\n", addr, pg_cnt);
-		// printf("\n---- 내용쓰~~~~~ \n %s)\n", page->va);
 
 		// 페이지가 수정되었는지 확인
 		if(pml4_is_dirty(curr->pml4, addr) == 1){
 
 			// 디스크에 파일 쓰기
-			file_write_at(file, addr, read_bytes, ofs);
+			file_write_at(file, addr, page->file.read_bytes, page->file.ofs);
 
 			// dirty-beat 를 다시 0으로 변경 (초기화)
 			pml4_set_dirty(curr->pml4, addr, false);
 
 		}
-		// 페이지 수정 안되있다면 삭제
-		// 유저/커널 가상주소 연결 끊음!
-
-		pg_cnt--;
+		// 페이지 삭제
+		// 유저-커널 가상주소 연결 끊음!
 		pml4_clear_page(curr->pml4, addr);
-		addr += PGSIZE;
 		palloc_free_page(page->frame->kva);
 		hash_delete(&curr->spt.hash, &page->h_elem);
-		// printf("unmmap 1번 완료!\n");
 
-		// spt_remove_page(&curr->spt, page);
-		// printf(" $$$$$$ \n");
-
-		
-		
-		// page = spt_find_page(&curr->spt, addr);
-		// if(page == NULL) break;
-		// printf("  @@ page?? %p \n ", addr);
-		// free();
-		// printf(" @@@ 페이지 줄어든다~~ : %d  , @@@ 주소는 늘어난다~~ : %p\n", page_len, addr);
+		addr += PGSIZE;
+		pg_cnt--;
 	};
 	file_close(file);
 

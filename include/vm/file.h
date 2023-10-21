@@ -19,7 +19,6 @@ struct aux_file_info{
     size_t zero_bytes;
     int pg_cnt;
 	off_t ofs;
-	bool writable;
 };
 
 void vm_file_init (void);

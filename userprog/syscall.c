@@ -87,8 +87,12 @@ void check_address(const uint64_t* addr){
 	/* what if the user provides an invalid pointer, a pointer to kernel memory, 
 	 * or a block partially in one of those regions */
 	/* 잘못된 접근인 경우, 프로세스 종료 */
-	if (!is_user_vaddr(addr) || addr == NULL)
+	if (!is_user_vaddr(addr) || addr == NULL){
 		exit(-1);
+	}
+	if(spt_find_page(&thread_current()->spt, addr) == NULL){
+		exit(-1);
+	}
 		
 } 
 
@@ -273,13 +277,12 @@ int filesize (int fd){
 /* 수정완료 */
 int read (int fd, void *buffer, unsigned size){
 	check_address(buffer);
-		// printf(" @@ buffer : %p\n", buffer);
-	
+	// printf(" @@@@ %x \n", buffer);
+	unsigned char *buf = buffer;
 	uint64_t *pte = pml4e_walk(thread_current()->pml4, buffer, 0);
 	if(*pte && !is_writable(pte)){
 		exit(-1);
 	}
-	unsigned char *buf = buffer;
 	int readsize;
 	struct thread *curr = thread_current();
 
@@ -287,7 +290,6 @@ int read (int fd, void *buffer, unsigned size){
 
 	if (f == NULL) return -1;
 	if (f == STDOUT) return -1;
-	
 	if (f == STDIN){
 		if(curr->stdin_count == 0){
 			NOT_REACHED();
@@ -412,21 +414,28 @@ int dup2(int oldfd, int newfd){
 void* mmap(void *addr, size_t length, int writable, int fd, off_t offset){
 	//  읽어야 하는 길이 , 할당받아야 하는 길이
 	struct file *file = process_get_file(fd);
+	if(!file)
+		return NULL;
 	
 	if(is_kernel_vaddr(addr))
 		return NULL;
 
 	/* 정렬이 되어 있는가 */ 
-	ASSERT (offset % PGSIZE == 0);	// offset 값이 PGSIZE 에 맞게 align 되어 있는지 확인
-
+	if (offset % PGSIZE != 0)	// offset 값이 PGSIZE 에 맞게 align 되어 있는지 확인
+		return NULL;
+	
 	/* 유효한 주소인가 */
 	// 주소가 페이지 경계에 align이 되어있는지, 주소가 NULL 인지
 	if(pg_round_down (addr) != addr || !addr)
 		return NULL;
 
 	/* 읽어야할 길이 + 오프셋 */
-	if((int)length <= 0 || offset > file_length(file))	// 읽어야할 길이가 0바이트인 경우
+	// if((int)length <= 0 || offset > file_length(file))	// 읽어야할 길이가 0바이트인 경우
+	if((int)length <= 0 || !file_length(file))	// 읽어야할 길이가 0바이트인 경우
 		return NULL;
+
+	// ASSERT (offset % PGSIZE == 0);
+	// if(offset % PGSIZE == 0)
 
 	/* 파일 디스크립터 */
 	if (fd < 0 || fd >= FDCOUNT_LIMIT)
