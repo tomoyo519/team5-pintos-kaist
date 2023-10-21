@@ -286,6 +286,12 @@ int read(int fd, void *buffer, unsigned size)
 {
 	check_address(buffer);
 	unsigned char *buf = buffer;
+	// 읽기만 가능한데다 쓰기를 시도하려 할때 fail 나야함........^^ pte가 쓰기를 시도하려는 앤데, 쓰기가 불가능한건데 시도했기 떔ㄴ에 exit(-1 ) 때려! 아야..
+	uint64_t *pte = pml4e_walk(thread_current()->pml4, buffer, 0);
+	if (*pte && !is_writable(pte))
+	{
+		exit(-1);
+	}
 	int readsize;
 	struct thread *curr = thread_current();
 

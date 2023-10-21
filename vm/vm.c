@@ -134,11 +134,11 @@ vm_get_victim(void)
 
 /* Evict one page and return the corresponding frame.
  * Return NULL on error.*/
-//페이지를 배신..하고 다른데 가서 달라붙음.
-// palloc 해서 NULL 이 나오는 경우, 다른 프레임 떼와서 붙여주기.
-// 전\체프레임 frame list, elem 으로 연결관리
-// swap table 은 anony에만 필요.
-// file은 
+// 페이지를 배신..하고 다른데 가서 달라붙음.
+//  palloc 해서 NULL 이 나오는 경우, 다른 프레임 떼와서 붙여주기.
+//  전\체프레임 frame list, elem 으로 연결관리
+//  swap table 은 anony에만 필요.
+//  file은
 static struct frame *
 vm_evict_frame(void)
 {
@@ -348,13 +348,15 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 		void *upage = p->va;
 		bool writable = p->writable;
 		vm_initializer *init = p->uninit.init;
-		void *aux = p->uninit.aux;
+		// malloc을 한 뒤에 넘겨야 한다.
+		//  uninit 타입인 경우는 aux 복사, 나머지 타입인 경우에는.. 생각을 해봐라 모르겠는데? 알려줘 답주세요 답답답 dap
+		//  최종 진화 타입여부에 따라타입을 나눠서 어떤것을 복제 떠야 하는지 생각해봐라.
 
 		// bool (*page_initializer)(struct page *, enum vm_type, void *);
 		if (type == VM_UNINIT)
 		// 부모 페이지가 초기화가 안된경우,
 		{
-			vm_alloc_page_with_initializer(VM_ANON, upage, writable, init, aux);
+			vm_alloc_page_with_initializer(VM_ANON, upage, writable, init, p->uninit.aux);
 			// 왜요 ? 부모가 초기화가 안된 상태, 초기화를 해주고 다시 continue 해서 반복문 돌고, 다시 부모정보를 받아와서
 			//  밑에서 초기화가 된 상태로 else 를 지나서 자식에게 복사가 된다.
 			// 다시 위로 올라감.
@@ -374,7 +376,8 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 		}
 		// src에서 복사해서 dst로 옮기는것.
 		struct page *child_page = spt_find_page(dst, upage); // dst 보조테이블에서 현재 복사할 가상주소 upage에 해당하는 자식페이지를 찾음
-		memcpy(child_page->frame->kva, p->frame->kva, PGSIZE);
+		if (p->frame)
+			memcpy(child_page->frame->kva, p->frame->kva, PGSIZE);
 	}
 	return true;
 }
@@ -383,8 +386,8 @@ void hash_page_destroy(struct hash_elem *e, void *aux)
 {
 	struct page *page = hash_entry(e, struct page, hash_elem);
 	destroy(page);
-	// TODO - 지우면 에러 헤결 
-	free(page);
+	// TODO - 지우면 에러 헤결
+	// free(page);
 }
 /* Free the resource hold by the supplemental page table */
 // SPT가 보유하고 있던 모든 리소스를 해제하는 함수 (process_exit(), process_cleanup()에서 호출)
