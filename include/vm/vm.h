@@ -67,7 +67,7 @@ struct page {
 struct frame {
 	void *kva;		/* 커널 가상 주소 */
 	struct page *page;
-	// 멤버 추가 가능!!
+	struct list_elem f_elem;
 };
 
 /* The function table for page operations.

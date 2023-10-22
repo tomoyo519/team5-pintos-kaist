@@ -259,6 +259,11 @@ pml4_set_page (uint64_t *pml4, void *upage, void *kpage, bool rw) {
  * directory PD.  Later accesses to the page will fault.  Other
  * bits in the page table entry are preserved.
  * UPAGE need not be mapped. */
+
+/* 사용자 가상 페이지 UPAGE를 페이지 디렉터리 PD에서 "not present"으로 표시합니다.
+ * 이후 페이지에 대한 접근은 오류를 발생시킵니다.
+ * 페이지 테이블 항목(PTE)의 다른 비트는 보존됩니다.
+ * UPAGE는 매핑되어 있지 않아도 됩니다. */
 void
 pml4_clear_page (uint64_t *pml4, void *upage) {
 	uint64_t *pte;

@@ -173,14 +173,13 @@ disk_print_stats (void) {
 	}
 }
 
-/* Returns the disk numbered DEV_NO--either 0 or 1 for master or
-   slave, respectively--within the channel numbered CHAN_NO.
+/* DEV_NO 번호를 갖는 디스크를 반환합니다. 이 번호는 주로 0 또는 1로, 각각 마스터 또는 슬레이브를 나타냅니다. CHAN_NO로 지정된 채널 내에서의 디스크를 반환합니다.
 
-   Pintos uses disks this way:
-0:0 - boot loader, command line args, and operating system kernel
-0:1 - file system
-1:0 - scratch
-1:1 - swap
+Pintos는 다음과 같이 디스크를 사용합니다:
+0:0 - 부트 로더, 명령행 인수 및 운영 체제 커널
+0:1 - 파일 시스템
+1:0 - 스크래치(임시) 영역
+1:1 - 스왑(교환) 영역
 */
 struct disk *
 disk_get (int chan_no, int dev_no) {
@@ -207,6 +206,10 @@ disk_size (struct disk *d) {
    room for DISK_SECTOR_SIZE bytes.
    Internally synchronizes accesses to disks, so external
    per-disk locking is unneeded. */
+/* 디스크 D로부터 섹터 SEC_NO를 읽어와 BUFFER에 저장합니다.
+   BUFFER는 DISK_SECTOR_SIZE 바이트를 수용할 공간이 있어야 합니다.
+   디스크에 대한 접근은 내부적으로 동기화되므로
+   외부에서 각 디스크마다의 잠금(lock) 설정이 필요하지 않습니다. */
 void
 disk_read (struct disk *d, disk_sector_t sec_no, void *buffer) {
 	struct channel *c;
@@ -231,6 +234,11 @@ disk_read (struct disk *d, disk_sector_t sec_no, void *buffer) {
    acknowledged receiving the data.
    Internally synchronizes accesses to disks, so external
    per-disk locking is unneeded. */
+/* 섹터 SEC_NO를 버퍼 BUFFER로 디스크 D에 기록합니다.
+   BUFFER는 DISK_SECTOR_SIZE 바이트를 포함해야 합니다.
+   데이터가 디스크에 수신된 후 반환됩니다.
+   디스크에 대한 접근을 내부적으로 동기화하므로
+   외부에서 디스크 당 잠금(lock)을 사용할 필요가 없습니다. */
 void
 disk_write (struct disk *d, disk_sector_t sec_no, const void *buffer) {
 	struct channel *c;

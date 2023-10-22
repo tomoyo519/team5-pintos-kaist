@@ -27,20 +27,61 @@ bool
 file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
 	page->operations = &file_ops;
+	
+	// struct uninit_page *uninit = &page->uninit;
+
+	
+	// void *aux = uninit->aux;
+	// struct aux_file_info *f_info = (struct aux_file_info*)uninit->aux;
+
+	// page->file.file = f_info->file;
+	// page->file.read_bytes = f_info->read_bytes;
+	// page->file.pg_cnt = f_info->pg_cnt;
+	// page->file.ofs = f_info->ofs;
 
 	struct file_page *file_page = &page->file;
+
+	return true;
 }
+
 
 /* Swap in the page by read contents from the file. */
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
-	struct file_page *file_page UNUSED = &page->file;
+	// struct file_page *file_page UNUSED = &page->file;
+	// /*파일에서 콘텐츠를 읽어 kva 페이지에서 swap in합니다. 파일 시스템과 동기화해야 합니다.*/
+	// struct file *file = file_page->file;
+	// size_t read_bytes = file_page->read_bytes;
+	// off_t ofs = file_page->ofs;
+	// int pg_cnt = file_page->pg_cnt;
+
+	// file_read_at(file, page->frame->kva, read_bytes, ofs);
+
 }
 
 /* Swap out the page by writeback contents to the file. */
 static bool
 file_backed_swap_out (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
+	uint64_t curr_pml4 = thread_current()->pml4;
+	
+	struct file *file = file_page->file;
+	size_t read_bytes = file_page->read_bytes;
+	off_t ofs = file_page->ofs;
+	
+	// dirty 한지 확인
+	if(pml4_is_dirty(curr_pml4, page->frame->kva)){
+
+		file_write_at(file, page->frame->kva, read_bytes, ofs);
+		pml4_set_dirty(curr_pml4, page->va, 0);
+	}
+
+	// page-frame 연결 끊기
+	page->frame->page = NULL;
+	page->frame = NULL;
+	pml4_clear_page(curr_pml4, page->va);
+	return true;
+
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
@@ -68,6 +109,7 @@ lazy_load_file (struct page *page, void *aux) {
 	page->file.read_bytes = page_read_bytes;
 	page->file.ofs = ofs;
 	page->file.pg_cnt = f_info->pg_cnt;
+	// free(f_info);
 	return true;
 }
 
@@ -83,7 +125,6 @@ do_mmap (void *addr, size_t length, int writable,
 
 	// 할당받아야 할 페이지 개수
 	int pg_cnt = length % PGSIZE != 0 ? (int)(length/PGSIZE) + 1 : (int)(length/PGSIZE);
-
 	// length : 읽어야할 길이 = 할당받아야할 메모리
 	while(length > 0) {
 		size_t page_read_bytes = length < PGSIZE ? length : PGSIZE;
@@ -136,12 +177,15 @@ do_munmap (void *addr) {
 			pml4_set_dirty(curr->pml4, addr, false);
 
 		}
-		// 페이지 삭제
 		// 유저-커널 가상주소 연결 끊음!
 		pml4_clear_page(curr->pml4, addr);
-		palloc_free_page(page->frame->kva);
-		hash_delete(&curr->spt.hash, &page->h_elem);
 
+		// swap out 했을 때 page->frame = NULL 처리 때문에 조건문 필요
+		if(page->frame){
+			palloc_free_page(page->frame->kva);
+		}
+		// palloc_free_page(page->frame->kva);
+		hash_delete(&curr->spt.hash, &page->h_elem);
 		addr += PGSIZE;
 		pg_cnt--;
 	};

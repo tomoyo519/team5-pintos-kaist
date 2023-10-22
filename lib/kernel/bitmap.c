@@ -267,6 +267,11 @@ bitmap_all (const struct bitmap *b, size_t start, size_t cnt) {
    consecutive bits in B at or after START that are all set to
    VALUE.
    If there is no such group, returns BITMAP_ERROR. */
+/* 비트 집합(set) 또는 비트 해제(unset)를 찾는 함수. */
+
+/* B에서 START 이후에 나타나는, 모두 VALUE로 설정된
+   연속적인 CNT 비트 그룹의시작 인덱스를 찾아 반환합니다.
+   만약 그러한 그룹이 존재하지 않으면 BITMAP_ERROR를 반환합니다. */
 size_t
 bitmap_scan (const struct bitmap *b, size_t start, size_t cnt, bool value) {
 	ASSERT (b != NULL);
@@ -289,6 +294,13 @@ bitmap_scan (const struct bitmap *b, size_t start, size_t cnt, bool value) {
    If CNT is zero, returns 0.
    Bits are set atomically, but testing bits is not atomic with
    setting them. */
+/* B에서 START 이후에 나타나는, 모두 VALUE로 설정된
+   연속적인 CNT 비트 그룹 중에서 첫 번째 그룹을 찾아서
+   해당 비트들을 모두 !VALUE로 뒤집고, 그 그룹의 첫 번째 비트의 인덱스를 반환합니다.
+   만약 그러한 그룹이 존재하지 않으면 BITMAP_ERROR를 반환합니다.
+   CNT가 0인 경우 0을 반환합니다.
+   비트는 원자적으로 설정되지만,
+   비트를 설정하는 것과 비트를 테스트하는 것은 원자적으로 수행되지 않습니다. */
 size_t
 bitmap_scan_and_flip (struct bitmap *b, size_t start, size_t cnt, bool value) {
 	size_t idx = bitmap_scan (b, start, cnt, value);

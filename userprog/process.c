@@ -771,6 +771,7 @@ lazy_load_segment (struct page *page, void *aux) {
 	}
 
 	memset (page->frame->kva + page_read_bytes, 0, page_zero_bytes);
+	// free(f_info);
 	return true;
 
 	/* TODO: Load the segment from the file */

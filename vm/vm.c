@@ -22,8 +22,8 @@ vm_init (void) {
 	pagecache_init ();
 #endif
 	register_inspect_intr ();
-	// list_init(&frame_table);           // 수정!
-	// start = list_begin(&frame_table);
+	list_init(&frame_table);           // 수정!
+	start = list_begin(&frame_table);
 }
 
 /* 페이지 유형을 가져옵니다.
@@ -125,8 +125,13 @@ static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
 	/* TODO: The policy for eviction is up to you. */
+	victim = list_entry(list_pop_front(&frame_table), struct frame, f_elem);
+
+	if(victim)
+		return victim;
+
+	printf("IS NOT VICTIM FRAME!\n");
 	
-	return victim;
 }
 
 /* Evict one page and return the corresponding frame.
@@ -134,10 +139,10 @@ vm_get_victim (void) {
 static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim = vm_get_victim ();
-	/* TODO: swap out the victim and return the evicted frame. */
-	// swap_out();
-	// swap_out()
-	// return NULL;
+	if(victim->page != NULL){
+		swap_out(victim->page);	
+	}
+	return victim;
 }
 
 /* palloc() 및 프레임 가져오기.
@@ -153,15 +158,17 @@ vm_get_frame (void) {
 	void *pg_ptr = palloc_get_page(PAL_USER);
 	if (pg_ptr == NULL)
 	{
-	  return vm_evict_frame();
+	  frame = vm_evict_frame();
+	}else{
+		frame = (struct frame *)malloc(sizeof(struct frame));
+		frame->kva = pg_ptr;
+		frame->page = NULL;
+
 	}	
-	frame = (struct frame *)malloc(sizeof(struct frame));
-	frame->kva = pg_ptr;
-	frame->page = NULL;
 
 	ASSERT(frame != NULL);
-	ASSERT(frame->page == NULL);
-	
+	// ASSERT(frame->page == NULL);
+	list_push_back(&frame_table, &frame->f_elem);
 	return frame;
 
 }
@@ -249,8 +256,8 @@ vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
 
 	ASSERT(frame && frame->kva)
-
-	if(!page || page->frame){
+	//if(!page || page->frame)
+	if(!page){
 		return false;
 	}
 
