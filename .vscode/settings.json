@@ -54,7 +54,12 @@
     "typeinfo": "c",
     "main.h": "c",
     "chrono": "c",
-    "ratio": "c"
+    "ratio": "c",
+    "stdint.h": "c",
+    "process.h": "c"
+  },
+  "editor.tokenColorCustomizations": {
+    "comments": "#9974ff"
   },
   "C_Cpp.errorSquiggles": "disabled"
 }

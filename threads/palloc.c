@@ -291,6 +291,8 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt) {
    then the page is filled with zeros.  If no pages are
    available, returns a null pointer, unless PAL_ASSERT is set in
    FLAGS, in which case the kernel panics. */
+   // 하나의 페이지를 가져오고, 커널 가상 주소를 반환한다.
+   //PAL_USER 가 설정되어있다면, user poll 에서 페이지를 가져온다.
 void *
 palloc_get_page (enum palloc_flags flags) {
 	return palloc_get_multiple (flags, 1);

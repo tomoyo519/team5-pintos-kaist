@@ -7,6 +7,13 @@
 #include "vm/inspect.h"
 #include "hash.h"
 
+struct lazy_load_arg
+{
+	struct file *file;
+	off_t ofs;
+	uint32_t read_bytes;
+	uint32_t zero_bytes;
+};
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void vm_init(void)
@@ -128,7 +135,10 @@ vm_get_victim(void)
 {
 	struct frame *victim = NULL;
 	/* TODO: The policy for eviction is up to you. */
-
+	// 엘렘과 쓰레드 커렌트 설정
+	// 반복문 돌면서, pml4 _is_accessed true 이면, pml4_set_accessed
+	// 아니라면 vicitm 리턴해주기.
+	// 반복문을 두 번 돌리는 이유?  첫번째 반복문에서 찾지 못한경우, 두번쨰 반복문에서 찾기 위해서..
 	return victim;
 }
 
@@ -143,15 +153,19 @@ static struct frame *
 vm_evict_frame(void)
 {
 	struct frame *victim UNUSED = vm_get_victim();
-	/* TODO: swap out the victim and return the evicted frame. */
-
-	return NULL;
+	// NOTE - 페이지가, file-backed냐, anon이냐에 따라서 호출되는 하ㅏㅁ수가 달라짐.
+	// anonymous 인 경우, 디스크에[ backing store가 따로 없기 때문에 만들어 줘야 함.
+	swap_out(victim->page);
+	return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
  * and return it. This always return valid address. That is, if the user pool
  * memory is full, this function evicts the frame to get the available memory
  * space.*/
+// vm_try_handle_fault 에서, vm_clain_page가 불리는 경우는 스택을 늘려줘서 해결되는 것이 아닌 다른 경우
+// 의 fault 가 난 주소에 대해서, 페이지와 물리 프레임을 연결시켜주기 위해서
+// 이떄 물리 프레임을 연결시켜주려면, 빈 프레임을 찾아야 하는데, 이를 담당하는 함수 = vm_get_frame()
 static struct frame *
 vm_get_frame(void)
 {
@@ -160,8 +174,8 @@ vm_get_frame(void)
 
 	void *kva = palloc_get_page(PAL_USER); // user pool에서 새로운 physical page를 가져온다.
 
-	if (kva == NULL)   // page 할당 실패 -> 나중에 swap_out 처리
-		PANIC("todo"); // OS를 중지시키고, 소스 파일명, 라인 번호, 함수명 등의 정보와 함께 사용자 지정 메시지를 출력
+	if (kva == NULL)		   // page 할당 실패 -> 나중에 swap_out 처리
+		swap_out(frame->page); // OS를 중지시키고, 소스 파일명, 라인 번호, 함수명 등의 정보와 함께 사용자 지정 메시지를 출력
 
 	frame = (struct frame *)malloc(sizeof(struct frame)); // 프레임 할당
 	frame->kva = kva;									  // 프레임 멤버 초기화
@@ -169,6 +183,11 @@ vm_get_frame(void)
 
 	ASSERT(frame != NULL);
 	ASSERT(frame->page == NULL);
+	// palloc 으로 공간을 받오울 수가 없다면 => frame -> kva == NULL 이라면, evict를 통해 프레임을 차지하고있는 페이지를 쫓아내야 한다.
+	if (!frame->kva)
+	{
+		vm_evict_frame();
+	}
 	return frame;
 }
 
@@ -360,6 +379,22 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 			// 왜요 ? 부모가 초기화가 안된 상태, 초기화를 해주고 다시 continue 해서 반복문 돌고, 다시 부모정보를 받아와서
 			//  밑에서 초기화가 된 상태로 else 를 지나서 자식에게 복사가 된다.
 			// 다시 위로 올라감.
+			continue;
+		}
+
+		if (type == VM_FILE)
+		{
+			struct lazy_load_arg *lazy_load_arg = malloc(sizeof(struct lazy_load_arg));
+			lazy_load_arg->file = p->file.file;
+			lazy_load_arg->ofs = p->file.ofs;
+			lazy_load_arg->read_bytes = p->file.read_bytes;
+			if (!vm_alloc_page_with_initializer(VM_FILE, upage, writable, NULL, lazy_load_arg))
+			{
+				return false;
+			}
+			struct page *file_page = spt_find_page(dst, upage);
+			file_backed_initializer(file_page, type, NULL);
+			pml4_set_page(thread_current()->pml4, file_page->va, p->frame->kva, p->writable);
 			continue;
 		}
 

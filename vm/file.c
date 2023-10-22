@@ -17,6 +17,15 @@ static const struct page_operations file_ops = {
 	.type = VM_FILE,
 };
 
+struct lazy_load_arg
+{
+	struct file *file;
+	off_t ofs;
+	int length;
+	uint32_t read_bytes;
+	uint32_t zero_bytes;
+};
+
 /* The initializer of file vm */
 void vm_file_init(void)
 {
@@ -36,13 +45,58 @@ static bool
 file_backed_swap_in(struct page *page, void *kva)
 {
 	struct file_page *file_page UNUSED = &page->file;
+
+	if (page == NULL)
+		return false;
+
+	struct lazy_load_arg *aux = (struct lazy_load_arg *)page->uninit.aux;
+
+	struct file *file = aux->file;
+	off_t offset = aux->ofs;
+	size_t page_read_bytes = aux->read_bytes;
+	size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+	file_seek(file, offset);
+
+	if (file_read(file, kva, page_read_bytes) != (int)page_read_bytes)
+	{
+		// palloc_free_page (kva);
+		return false;
+	}
+
+	memset(kva + page_read_bytes, 0, page_zero_bytes);
+
+	return true;
 }
 
 /* Swap out the page by writeback contents to the file. */
 static bool
+// TODO - 구현,,
 file_backed_swap_out(struct page *page)
 {
+	// 예외처리를 잘 해주자.
+	if (!page)
+	{
+		return false;
+	}
 	struct file_page *file_page UNUSED = &page->file;
+	void *addr = page->va;
+	struct thread *t = thread_current();
+	if (pml4_is_dirty(t->pml4, addr))
+	{
+		struct lazy_load_arg *file = file_page->file;
+		size_t length = file_page->length;
+		off_t offset = file_page->ofs;
+		void *kva = page->frame->kva;
+		if (file_write_at(file, kva, length, offset) != length)
+		{
+			return false;
+		}
+	}
+	pml4_clear_page(t->pml4, addr);
+	page->frame->page = NULL;
+	page->frame = NULL;
+	return true;
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
@@ -56,15 +110,6 @@ file_backed_destroy(struct page *page)
 
 /* Do the mmap */
 
-struct lazy_load_arg
-{
-	struct file *file;
-	off_t ofs;
-	size_t length;
-	uint32_t read_bytes;
-	uint32_t zero_bytes;
-};
-
 static bool
 lazy_Fileload_segment(struct page *page, void *aux)
 {
@@ -74,12 +119,6 @@ lazy_Fileload_segment(struct page *page, void *aux)
 	file_seek(lazy_load_arg->file, lazy_load_arg->ofs);
 	// 2) 파일을 read_bytes만큼 물리 프레임에 읽어 들인다.
 	file_read_at(lazy_load_arg->file, page->frame->kva, lazy_load_arg->read_bytes, lazy_load_arg->ofs);
-
-	// if (!= (int)(lazy_load_arg->read_bytes))
-	// {
-	// 	palloc_free_page(page->frame->kva);
-	// 	return false;
-	// }
 	// 3) 다 읽은 지점부터 zero_bytes만큼 0으로 채운다.
 	memset(page->frame->kva + lazy_load_arg->read_bytes, 0, lazy_load_arg->zero_bytes);
 	struct file *f = page->file.file;
@@ -99,6 +138,7 @@ do_mmap(void *addr, size_t length, int writable,
 
 {
 	// 그사이에 파일이 close 가 되었을 경우를 대비하기 위함.
+
 	struct file *f = file_reopen(file);
 	// 파일의 오프셋이 넘어오니까 거기부터 mmap 을 하겠다는건데
 	//  file_seek로 해서 거기서 오프셋으로 넘기면 됨
@@ -114,8 +154,9 @@ do_mmap(void *addr, size_t length, int writable,
 	// ASSERT((read_bytes + zero_bytes) % PGSIZE == 0); // read_bytes + zero_bytes 페이지가 PGSIZE의 배수인가?
 	ASSERT(pg_ofs(addr) == 0); // ofs가 페이지 정렬 되어있는지 확인
 	// page주소값을 가지고있음, 만약 여러페이지를 쓰면 pgsize 만큼 더해가며 업데이트 해나가는 값.
-	uint8_t *upage = addr;
+	void *upage = addr;
 	int count = length % PGSIZE != 0 ? (int)(length / PGSIZE) + 1 : (int)(length / PGSIZE);
+	// printf("%d", length);
 	while (length > 0) // read_byte, zero_bytes가 0보다 클때 동안 루프
 	{
 		size_t page_read_bytes = PGSIZE < length ? PGSIZE : length;
@@ -146,7 +187,7 @@ do_mmap(void *addr, size_t length, int writable,
 											writable, lazy_Fileload_segment, lazy_load_arg))
 		{
 			free(lazy_load_arg);
-			return NULL;
+			return false;
 		}
 
 		/* Advance. */
@@ -175,6 +216,7 @@ void do_munmap(void *addr)
 	struct file *file = p->file.file;
 	int total_length = p->file.length;
 
+	// printf("mummap\n");
 	while (total_length > 0)
 	{
 		struct page *p = spt_find_page(&cur_t->spt, addr);
