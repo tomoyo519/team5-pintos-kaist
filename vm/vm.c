@@ -137,11 +137,6 @@ vm_get_victim(void)
 {
 	struct frame *victim = list_entry(list_pop_front(&frame_list), struct frame, frame_elem);
 
-	// 엘렘과 쓰레드 커렌트 설정
-	// 반복문 돌면서, pml4 _is_accessed true 이면, pml4_set_accessed
-	// 아니라면 vicitm 리턴해주기.
-	// 반복문을 두 번 돌리는 이유?  첫번째 반복문에서 찾지 못한경우, 두번쨰 반복문에서 찾기 위해서..
-
 	return victim;
 }
 
@@ -159,7 +154,7 @@ vm_evict_frame(void)
 	// NOTE - 페이지가, file-backed냐, anon이냐에 따라서 호출되는 하ㅏㅁ수가 달라짐.
 	// anonymous 인 경우, 디스크에[ backing store가 따로 없기 때문에 만들어 줘야 함.
 	swap_out(victim->page);
-	memset(victim->kva, 0, PGSIZE);
+	// memset(victim->kva, 0, PGSIZE);
 	return victim;
 }
 
@@ -371,13 +366,11 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 	hash_first(&i, &src->spt_hash);
 	while (hash_next(&i))
 	{
-		// enum vm_type type, void *upage, bool writable,
-		// vm_initializer *init, void *aux
 		struct page *p = hash_entry(hash_cur(&i), struct page, hash_elem);
 		enum vm_type type = p->operations->type;
 		void *upage = p->va;
 		bool writable = p->writable;
-		vm_initializer *init = p->uninit.init;
+
 		// malloc을 한 뒤에 넘겨야 한다.
 		//  uninit 타입인 경우는 aux 복사, 나머지 타입인 경우에는.. 생각을 해봐라 모르겠는데? 알려줘 답주세요 답답답 dap
 		//  최종 진화 타입여부에 따라타입을 나눠서 어떤것을 복제 떠야 하는지 생각해봐라.
@@ -399,7 +392,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 			lazy_load_arg->file = p->file.file;
 			lazy_load_arg->ofs = p->file.ofs;
 			lazy_load_arg->read_bytes = p->file.read_bytes;
-			if (!vm_alloc_page_with_initializer(VM_FILE, upage, writable, NULL, lazy_load_arg))
+			if (!vm_alloc_page_with_initializer(type, upage, writable, NULL, lazy_load_arg))
 			{
 				return false;
 			}
@@ -418,12 +411,8 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 		if (!vm_claim_page(upage))
 			// 자식페이지를 물리주소랑 맵핑.
 			return false;
-		if (type != VM_UNINIT)
-		{
-
-			struct page *child_page = spt_find_page(dst, upage); // dst 보조테이블에서 현재 복사할 가상주소 upage에 해당하는 자식페이지를 찾음
-			memcpy(child_page->frame->kva, p->frame->kva, PGSIZE);
-		}
+		struct page *child_page = spt_find_page(dst, upage); // dst 보조테이블에서 현재 복사할 가상주소 upage에 해당하는 자식페이지를 찾음
+		memcpy(child_page->frame->kva, p->frame->kva, PGSIZE);
 	}
 	return true;
 }

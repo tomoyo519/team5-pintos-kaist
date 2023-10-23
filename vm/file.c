@@ -37,7 +37,15 @@ bool file_backed_initializer(struct page *page, enum vm_type type, void *kva)
 	/* Set up the handler */
 	page->operations = &file_ops;
 
-	struct file_page *file_page = &page->file;
+	struct uninit_page *uninit = &page->uninit;
+
+	struct lazy_load_arg *f_info = (struct lazy_load_arg *)uninit->aux;
+	page->file.file = f_info->file;
+	page->file.read_bytes = f_info->read_bytes;
+	page->file.length = f_info->length;
+	page->file.ofs = f_info->ofs;
+
+	return true;
 }
 
 /* Swap in the page by read contents from the file. */
@@ -49,22 +57,16 @@ file_backed_swap_in(struct page *page, void *kva)
 	if (page == NULL)
 		return false;
 
-	struct lazy_load_arg *aux = (struct lazy_load_arg *)page->uninit.aux;
+	// struct lazy_load_arg *aux = (struct lazy_load_arg *)page->uninit.aux;
 
-	struct file *file = aux->file;
-	off_t offset = aux->ofs;
-	size_t page_read_bytes = aux->read_bytes;
-	size_t page_zero_bytes = PGSIZE - page_read_bytes;
+	struct file *file = file_page->file;
+	off_t offset = file_page->ofs;
+	size_t page_read_bytes = file_page->read_bytes;
 
 	file_seek(file, offset);
 
 	if (file_read(file, kva, page_read_bytes) != (int)page_read_bytes)
-	{
-		// palloc_free_page (kva);
 		return false;
-	}
-
-	memset(kva + page_read_bytes, 0, page_zero_bytes);
 
 	return true;
 }
@@ -82,20 +84,18 @@ file_backed_swap_out(struct page *page)
 	struct file_page *file_page UNUSED = &page->file;
 	void *addr = page->va;
 	struct thread *t = thread_current();
-	if (pml4_is_dirty(t->pml4, addr))
+	struct file *file = file_page->file;
+	off_t offset = file_page->ofs;
+	size_t length = file_page->length;
+	if (pml4_is_dirty(t->pml4, page->frame->kva))
 	{
-		struct lazy_load_arg *file = file_page->file;
-		size_t length = file_page->length;
-		off_t offset = file_page->ofs;
 		void *kva = page->frame->kva;
-		if (file_write_at(file, kva, length, offset) != length)
-		{
-			return false;
-		}
+		file_write_at(file, kva, length, offset);
+		pml4_set_dirty(t->pml4, page->va, 0);
 	}
-	pml4_clear_page(t->pml4, addr);
 	page->frame->page = NULL;
 	page->frame = NULL;
+	pml4_clear_page(t->pml4, addr);
 	return true;
 }
 
@@ -161,19 +161,8 @@ do_mmap(void *addr, size_t length, int writable,
 	while (length > 0) // read_byte, zero_bytes가 0보다 클때 동안 루프
 	{
 		size_t page_read_bytes = PGSIZE < length ? PGSIZE : length;
-		// pgsize 만큼 파일을 읽으면서..
-		/* Do calculate how to fill this page.
-		 * We will read PAGE_READ_BYTES bytes from FILE
-		 * and zero the final PAGE_ZERO_BYTES bytes. */
-		// size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE; // 최대로 읽을 수 있는 크기는 PGSIZE
-		// size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
-		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		// 페이지에 내용을 로드할때 사용할 함수와 필요한 인자 넣어주기.
-		//  vm_alloc_page_with initializer 의 4,5 번쨰 인자가 로드할때 사용할 함수, 필요한 인자.
-		// size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
-		// 변경할 필요없음.
+
 		struct lazy_load_arg *lazy_load_arg = (struct lazy_load_arg *)malloc(sizeof(struct lazy_load_arg));
 
 		lazy_load_arg->file = f;					 // 내용이 담긴 파일 객체
@@ -191,15 +180,11 @@ do_mmap(void *addr, size_t length, int writable,
 			return false;
 		}
 
-		/* Advance. */
-		// 다음 반복을 위하여 읽어들인 만큼 값을 갱신합니다.
-		// read_bytes -= page_read_bytes;
-		// zero_bytes -= page_zero_bytes;
 		addr += PGSIZE;
 		offset += page_read_bytes;
 		length -= page_read_bytes;
 	}
-	// printf("안녕하지못해\n");
+
 	return upage;
 }
 
@@ -224,26 +209,23 @@ void do_munmap(void *addr)
 
 		if (p == NULL)
 			return NULL;
-		// struct lazy_load_arg *lazy_load_arg = (struct lazy_load_arg *)p->uninit.aux;
-		// file-uninitializer에서 aux
 
-		if (pml4_is_dirty(cur_t->pml4, addr))
+		// 페이지가 수정되었는지 확인
+		if (pml4_is_dirty(cur_t->pml4, addr) == 1)
 		{
+			// 디스크에 파일 쓰기
 			file_write_at(file, addr, p->file.read_bytes, p->file.ofs);
+			// dirty-beat 를 다시 0으로 변경 (초기화)
+			pml4_set_dirty(cur_t->pml4, addr, false);
 		}
-		//  변경이 되어있지 않을 경우 해당 페이지를 pml4에서 삭제해주고, addr을 다음 페이지 주소로 변경하기
-
 		pml4_clear_page(cur_t->pml4, addr);
 		// TODO- 인자넣기; 		p가 아닌 이유,, 프레임의 크바, 물리메모리의 페이지를 프리해야 하므로,,
 
 		if (p->frame)
-		{
 			palloc_free_page(p->frame->kva);
-		}
-		hash_delete(&cur_t->spt.spt_hash, &p->hash_elem);
-		free(p);
-		addr += PGSIZE;
 
+		hash_delete(&cur_t->spt.spt_hash, &p->hash_elem);
+		addr += PGSIZE;
 		// total_length -= p->file.read_bytes;
 		total_length--;
 	}
