@@ -59,7 +59,7 @@ tid_t process_create_initd(const char *file_name)
 	// 변경사항
 	char *token, *save_ptr;
 	token = strtok_r(file_name, " ", &save_ptr);
-	// 변경사항
+
 	tid = thread_create(file_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page(fn_copy);
@@ -285,9 +285,11 @@ int process_exec(void *f_name)
 	}
 
 	/* argument stack 함수 위치가 여기여야 할까? */
-
 	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true); //Project 2 (argument passing 관련 변경) // KERN_BASE -> USER_STACK
-
+	void **rspp = &_if.rsp;
+	argument_stack(argv, argc, rspp);
+	_if.R.rdi = argc;
+	_if.R.rsi = *rspp + sizeof(void *);
 	/* Start switched process. */
 	do_iret(&_if);
 	NOT_REACHED();

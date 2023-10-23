@@ -116,18 +116,19 @@ lazy_Fileload_segment(struct page *page, void *aux)
 	struct lazy_load_arg *lazy_load_arg = (struct lazy_load_arg *)aux;
 
 	// 1) 파일의 position을 ofs으로 지정한다.
-	file_seek(lazy_load_arg->file, lazy_load_arg->ofs);
 	// 2) 파일을 read_bytes만큼 물리 프레임에 읽어 들인다.
 	file_read_at(lazy_load_arg->file, page->frame->kva, lazy_load_arg->read_bytes, lazy_load_arg->ofs);
 	// 3) 다 읽은 지점부터 zero_bytes만큼 0으로 채운다.
 	memset(page->frame->kva + lazy_load_arg->read_bytes, 0, lazy_load_arg->zero_bytes);
-	struct file *f = page->file.file;
+
+	// struct file *f = page->file.file;
 	page->file.file = lazy_load_arg->file;
 	page->file.read_bytes = lazy_load_arg->read_bytes;
 	page->file.ofs = lazy_load_arg->ofs;
 	page->file.length = lazy_load_arg->length;
 	// 파일에다 저장하는 이유 = 디스크 멥핑 해재할때, 다시 롸이트할떄 사용하기 위해,,
 	//  디스크에서 메모리로 연결시킬떄 저장시켜놧던거를...그....와일문 돌면서 햇던것을 여기서 해줘야 나중에 쓸 수 있음.
+
 	return true;
 }
 
@@ -152,7 +153,7 @@ do_mmap(void *addr, size_t length, int writable,
 
 	// size_t zero_bytes = PGSIZE - read_bytes;
 	// ASSERT((read_bytes + zero_bytes) % PGSIZE == 0); // read_bytes + zero_bytes 페이지가 PGSIZE의 배수인가?
-	ASSERT(pg_ofs(addr) == 0); // ofs가 페이지 정렬 되어있는지 확인
+	// ASSERT(pg_ofs(addr) == 0); // ofs가 페이지 정렬 되어있는지 확인
 	// page주소값을 가지고있음, 만약 여러페이지를 쓰면 pgsize 만큼 더해가며 업데이트 해나가는 값.
 	void *upage = addr;
 	int count = length % PGSIZE != 0 ? (int)(length / PGSIZE) + 1 : (int)(length / PGSIZE);
@@ -175,9 +176,9 @@ do_mmap(void *addr, size_t length, int writable,
 		// 변경할 필요없음.
 		struct lazy_load_arg *lazy_load_arg = (struct lazy_load_arg *)malloc(sizeof(struct lazy_load_arg));
 
-		lazy_load_arg->file = f;	 // 내용이 담긴 파일 객체
-		lazy_load_arg->ofs = offset; // 이 페이지에서 읽기 시작할 위치
-		lazy_load_arg->length = count;
+		lazy_load_arg->file = f;					 // 내용이 담긴 파일 객체
+		lazy_load_arg->ofs = offset;				 // 이 페이지에서 읽기 시작할 위치
+		lazy_load_arg->length = count;				 // 490
 		lazy_load_arg->read_bytes = page_read_bytes; // 이 페이지에서 읽어야 하는 바이트 수
 		lazy_load_arg->zero_bytes = page_zero_bytes; // 이 페이지에서 read_bytes만큼 읽고 공간이 남아 0으로 채워야 하는 바이트 수
 													 // vm_alloc_page_with_initializer를 호출하여  대기 중인 객체를 생성합니다.
@@ -198,6 +199,7 @@ do_mmap(void *addr, size_t length, int writable,
 		offset += page_read_bytes;
 		length -= page_read_bytes;
 	}
+	// printf("안녕하지못해\n");
 	return upage;
 }
 
@@ -216,10 +218,9 @@ void do_munmap(void *addr)
 	struct file *file = p->file.file;
 	int total_length = p->file.length;
 
-	// printf("mummap\n");
 	while (total_length > 0)
 	{
-		struct page *p = spt_find_page(&cur_t->spt, addr);
+		p = spt_find_page(&cur_t->spt, addr);
 
 		if (p == NULL)
 			return NULL;
@@ -229,15 +230,18 @@ void do_munmap(void *addr)
 		if (pml4_is_dirty(cur_t->pml4, addr))
 		{
 			file_write_at(file, addr, p->file.read_bytes, p->file.ofs);
-			pml4_set_dirty(cur_t->pml4, addr, 0);
 		}
-		// printf("😨%s\n", p->va);
 		//  변경이 되어있지 않을 경우 해당 페이지를 pml4에서 삭제해주고, addr을 다음 페이지 주소로 변경하기
 
 		pml4_clear_page(cur_t->pml4, addr);
 		// TODO- 인자넣기; 		p가 아닌 이유,, 프레임의 크바, 물리메모리의 페이지를 프리해야 하므로,,
-		palloc_free_page(p->frame->kva);
+
+		if (p->frame)
+		{
+			palloc_free_page(p->frame->kva);
+		}
 		hash_delete(&cur_t->spt.spt_hash, &p->hash_elem);
+		free(p);
 		addr += PGSIZE;
 
 		// total_length -= p->file.read_bytes;

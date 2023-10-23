@@ -61,7 +61,7 @@ static bool anon_swap_in(struct page *page, void *kva)
 
 	for (int i = 0; i < SECTORS_PER_PAGE; ++i)
 	{
-		disk_read(swap_disk, page_no * SECTORS_PER_PAGE + i, kva + DISK_SECTOR_SIZE * i);
+		disk_read(swap_disk, page_no * SECTORS_PER_PAGE + i, kva + (DISK_SECTOR_SIZE * i));
 	}
 
 	bitmap_set(swap_table, page_no, false);
@@ -72,7 +72,7 @@ static bool anon_swap_in(struct page *page, void *kva)
 // 메모리에서 디스크로 내용을 복사하여 익명 페이지를 스왑 디스크로 교체합니다. 먼저 스왑 테이블을 사용하여 디스크에서 사용 가능한 스왑 슬롯을 찾은 다음 데이터 페이지를 슬롯에 복사합니다. 데이터의 위치는 페이지 구조체에 저장되어야 합니다. 디스크에 사용 가능한 슬롯이 더 이상 없으면 커널 패닉이 발생할 수 있습니다.
 static bool anon_swap_out(struct page *page)
 {
-	printf("나 호출됨\n");
+
 	struct anon_page *anon_page = &page->anon;
 
 	int page_no = bitmap_scan(swap_table, 0, 1, false);
@@ -84,13 +84,15 @@ static bool anon_swap_out(struct page *page)
 
 	for (int i = 0; i < SECTORS_PER_PAGE; ++i)
 	{
-		disk_write(swap_disk, page_no * SECTORS_PER_PAGE + i, page->va + DISK_SECTOR_SIZE * i);
+		disk_write(swap_disk, page_no * SECTORS_PER_PAGE + i, page->frame->kva + DISK_SECTOR_SIZE * i);
 	}
 
 	bitmap_set(swap_table, page_no, true);
 	pml4_clear_page(thread_current()->pml4, page->va);
 
 	anon_page->swap_sec = page_no;
+	page->frame->page = NULL;
+	page->frame = NULL;
 
 	return true;
 }
