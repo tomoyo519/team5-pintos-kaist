@@ -40,7 +40,7 @@ int dup2(int oldfd, int newfd);
 
 /* syscall helper functions */
 void check_address(const uint64_t*);
-static struct file *process_get_file(int fd);
+struct file *process_get_file(int fd);
 int process_add_file(struct file *file);
 void process_close_file(int fd);
 
@@ -114,7 +114,7 @@ struct file *process_get_file (int fd){
 void process_close_file(int fd){
 	if (fd < 0 || fd > FDCOUNT_LIMIT)
 		return NULL;
-	thread_current()->fd_table[fd] = NULL;
+	//thread_current()->fd_table[fd] = NULL;
 }
 
 /* helper functions gooooooooooood job */
@@ -173,6 +173,13 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		case SYS_DUP2:
 			f->R.rax = dup2(f->R.rdi, f->R.rsi);
 			break;
+		case SYS_MMAP:
+			f->R.rax = do_mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+			break;
+		case SYS_MUNMAP:
+			do_munmap(f->R.rdi);
+			break;
+
 		default:						 /* call thread_exit() ? */
 			exit(-1);
 			break;
@@ -343,25 +350,19 @@ unsigned tell (int fd){
 	return file_tell(f);
 }
 
-void close (int fd){
-	
+void close (int fd){	
 	struct file *f = process_get_file(fd);
-
 	if(f == NULL)
 		return;
 	struct thread *curr = thread_current();
-
 	if(fd==0 || f==STDIN)
 		curr->stdin_count--;
 	else if(fd==1 || f==STDOUT)
 		curr->stdout_count--;
-	
 	process_close_file(fd);
-
-	if(fd <= 1 || f <= 2){
+	if(fd <= 1){
 		return;
 	}
-
 	if(f->dup_count == 0){
 		file_close(f);
 	}
@@ -395,3 +396,4 @@ int dup2(int oldfd, int newfd){
 	curr_fd_table[newfd] = f;
 	return newfd;
 }
+

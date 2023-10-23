@@ -754,7 +754,7 @@ install_page (void *upage, void *kpage, bool writable) {
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-static bool
+bool
 lazy_load_segment (struct page *page, void *aux) {
 
 	struct file_info *f_info = (struct file_info *)aux;
@@ -763,14 +763,17 @@ lazy_load_segment (struct page *page, void *aux) {
 	size_t page_read_bytes = f_info->read_bytes;
 	size_t page_zero_bytes = f_info->zero_bytes;
 	off_t ofs = f_info->ofs;
-
 	file_seek (file, ofs);
-	if(file_read (file, page->frame->kva, page_read_bytes) != (int) page_read_bytes) {
-		palloc_free_page (page->frame->kva);
-		return false;
-	}
-
-	memset (page->frame->kva + page_read_bytes, 0, page_zero_bytes);
+	file_open(file->inode);
+	page->ready_bytes = file_read (file, page->frame->kva, page_read_bytes);
+	// if(file_read (file, page->frame->kva, page_read_bytes) != (int) page_read_bytes) {
+	// 	palloc_free_page (page->frame->kva);
+	// 	return false;
+	// }
+	// min(len(file)???, page_read_byte??)
+	void* start_zero = (char*)(page->frame->kva) + page_read_bytes;
+ 
+	memset (start_zero, 0, page_zero_bytes);
 	return true;
 
 	/* TODO: Load the segment from the file */
@@ -798,7 +801,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 	ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT (pg_ofs (upage) == 0);
 	ASSERT (ofs % PGSIZE == 0);
-
+	
 	while (read_bytes > 0 || zero_bytes > 0) {
 		/* Do calculate how to fill this page.
 		 * We will read PAGE_READ_BYTES bytes from FILE

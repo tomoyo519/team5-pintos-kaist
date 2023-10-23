@@ -61,6 +61,11 @@ struct page {
 		struct page_cache page_cache;
 #endif
 	};
+
+	struct file * being_backed;
+	off_t offset;
+	uint32_t ready_bytes;
+	uint32_t zero_bytes;
 };
 
 /* The representation of "frame" */
