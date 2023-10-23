@@ -140,6 +140,7 @@ static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim = vm_get_victim ();
 	if(victim->page != NULL){
+		// memset(victim->kva, 0, PGSIZE);
 		swap_out(victim->page);	
 	}
 	return victim;

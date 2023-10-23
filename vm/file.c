@@ -28,18 +28,14 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
 	page->operations = &file_ops;
 	
-	// struct uninit_page *uninit = &page->uninit;
-
+	struct uninit_page *uninit = &page->uninit;
 	
-	// void *aux = uninit->aux;
-	// struct aux_file_info *f_info = (struct aux_file_info*)uninit->aux;
+	struct aux_file_info *f_info = (struct aux_file_info*)uninit->aux;
+	page->file.file = f_info->file;
+	page->file.read_bytes = f_info->read_bytes;
+	page->file.pg_cnt = f_info->pg_cnt;
+	page->file.ofs = f_info->ofs;
 
-	// page->file.file = f_info->file;
-	// page->file.read_bytes = f_info->read_bytes;
-	// page->file.pg_cnt = f_info->pg_cnt;
-	// page->file.ofs = f_info->ofs;
-
-	struct file_page *file_page = &page->file;
 
 	return true;
 }
@@ -48,15 +44,17 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 /* Swap in the page by read contents from the file. */
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
-	// struct file_page *file_page UNUSED = &page->file;
-	// /*파일에서 콘텐츠를 읽어 kva 페이지에서 swap in합니다. 파일 시스템과 동기화해야 합니다.*/
-	// struct file *file = file_page->file;
-	// size_t read_bytes = file_page->read_bytes;
-	// off_t ofs = file_page->ofs;
-	// int pg_cnt = file_page->pg_cnt;
+	struct file_page *file_page UNUSED = &page->file;
+	/*파일에서 콘텐츠를 읽어 kva 페이지에서 swap in
+	  파일 시스템과 동기화하기*/
+	struct file *file = file_page->file;
+	size_t read_bytes = file_page->read_bytes;
+	off_t ofs = file_page->ofs;
+	int pg_cnt = file_page->pg_cnt;
+	
 
-	// file_read_at(file, page->frame->kva, read_bytes, ofs);
-
+	file_read_at(file, kva, read_bytes, ofs);
+	return true;
 }
 
 /* Swap out the page by writeback contents to the file. */
