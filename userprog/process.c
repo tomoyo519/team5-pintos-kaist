@@ -286,10 +286,7 @@ int process_exec(void *f_name)
 
 	/* argument stack 함수 위치가 여기여야 할까? */
 	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true); //Project 2 (argument passing 관련 변경) // KERN_BASE -> USER_STACK
-	void **rspp = &_if.rsp;
-	argument_stack(argv, argc, rspp);
-	_if.R.rdi = argc;
-	_if.R.rsi = *rspp + sizeof(void *);
+
 	/* Start switched process. */
 	do_iret(&_if);
 	NOT_REACHED();
