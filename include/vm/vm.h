@@ -46,14 +46,15 @@ struct thread;
 struct page
 {
 	const struct page_operations *operations;
-	void *va;			 /* Address in terms of user space */
-	struct frame *frame; /* Back reference for frame */
+	void *va;			 /* user space, 사용자 공간에서 이 페이지의 가상주소 */
+	struct frame *frame; /* 이 페이지가 매핑된 물리 프레임. 해당 프레임이 물리 메모리에서 어디에 위치하는지 */
 
 	/* Your implementation */
 	struct hash_elem hash_elem;
 	bool writable;
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
+	// 각 타입별로 필요한 데이터만 저장하기
 	union
 	{
 		struct uninit_page uninit;
@@ -63,6 +64,10 @@ struct page
 		struct page_cache page_cache;
 #endif
 	};
+
+	//TODO : least recently used : 최근 최소사용 알고리즘 ...
+	//  페이지 교체 알고리즘에서 이 페이지가 얼마나 오래전에 접근되었는지 등의 정보를 관리하기 위해서 사용될 수 있음
+	struct list lru_list;
 };
 
 /* The representation of "frame" */
@@ -70,6 +75,7 @@ struct frame
 {
 	void *kva;
 	struct page *page;
+	struct list_elem frame_elem;
 };
 
 /* The function table for page operations.

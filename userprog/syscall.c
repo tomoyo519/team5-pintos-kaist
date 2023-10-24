@@ -11,11 +11,12 @@
 /* 추가해준 헤더 파일들 */
 #include "filesys/filesys.h"
 #include "filesys/file.h"
-#include <list.h>
+// #include <list.h>
 #include "threads/palloc.h"
-#include "threads/vaddr.h"
+// #include "threads/vaddr.h"
 #include "userprog/process.h"
 #include "threads/synch.h"
+#include "vm/vm.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -42,7 +43,7 @@ void check_address(const uint64_t *);
 static struct file *process_get_file(int fd);
 int process_add_file(struct file *file);
 void process_close_file(int fd);
-
+void *call_mmap(void *, size_t, int, int, off_t);
 /* Project2-extra */
 const int STDIN = 1;
 const int STDOUT = 2;
@@ -137,7 +138,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_EXIT: /* Terminate this process. */
 		exit(f->R.rdi);
 		break;
-	case SYS_FORK:; /* Clone current process. */
+	case SYS_FORK: /* Clone current process. */
 		struct thread *curr = thread_current();
 		memcpy(&curr->parent_if, f, sizeof(struct intr_frame));
 		f->R.rax = fork(f->R.rdi);
@@ -178,6 +179,12 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		break;
 	case SYS_DUP2:
 		f->R.rax = dup2(f->R.rdi, f->R.rsi);
+		break;
+	case SYS_MMAP:
+		f->R.rax = call_mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+		break;
+	case SYS_MUNMAP:
+		munmap(f->R.rdi);
 		break;
 	default: /* call thread_exit() ? */
 		exit(-1);
@@ -262,6 +269,7 @@ int open(const char *file)
 	if (fd == -1)
 		file_close(f);
 	lock_release(&filesys_lock);
+
 	return fd;
 }
 
@@ -278,6 +286,12 @@ int read(int fd, void *buffer, unsigned size)
 {
 	check_address(buffer);
 	unsigned char *buf = buffer;
+	// 읽기만 가능한데다 쓰기를 시도하려 할때 fail 나야함........^^ pte가 쓰기를 시도하려는 앤데, 쓰기가 불가능한건데 시도했기 떔ㄴ에 exit(-1 ) 때려! 아야..
+	uint64_t *pte = pml4e_walk(thread_current()->pml4, buffer, 0);
+	if (*pte && !is_writable(pte))
+	{
+		exit(-1);
+	}
 	int readsize;
 	struct thread *curr = thread_current();
 
@@ -429,4 +443,39 @@ int dup2(int oldfd, int newfd)
 	close(newfd);
 	curr_fd_table[newfd] = f;
 	return newfd;
+}
+
+void *call_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
+{
+
+	if (offset % PGSIZE != 0 || is_kernel_vaddr(addr) || (long long)length <= 0 || !addr || pg_round_down(addr) != addr)
+	{
+		return NULL;
+	}
+
+	struct supplemental_page_table *spt = &thread_current()->spt;
+	// 다른 애가 이미 쓰고있으면 안되니까!!!
+	if (spt_find_page(spt, addr))
+	{
+		return NULL;
+	}
+
+	struct file *f = process_get_file(fd);
+	if (f == NULL)
+	{
+		return NULL;
+	}
+	if (f == STDOUT)
+	{
+		return NULL;
+	}
+
+	// 왜인자가 fd가 아니라 f 아님 ? d0Map은 파일을 인자로 받기 때문에,,
+
+	return do_mmap(addr, length, writable, f, offset);
+}
+
+void munmap(void *addr)
+{
+	do_munmap(addr);
 }

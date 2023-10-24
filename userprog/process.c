@@ -59,7 +59,7 @@ tid_t process_create_initd(const char *file_name)
 	// 변경사항
 	char *token, *save_ptr;
 	token = strtok_r(file_name, " ", &save_ptr);
-	// 변경사항
+
 	tid = thread_create(file_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page(fn_copy);
@@ -285,7 +285,6 @@ int process_exec(void *f_name)
 	}
 
 	/* argument stack 함수 위치가 여기여야 할까? */
-
 	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true); //Project 2 (argument passing 관련 변경) // KERN_BASE -> USER_STACK
 
 	/* Start switched process. */
@@ -628,7 +627,7 @@ load(const char *file_name, struct intr_frame *if_)
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	// file_close (file);
+
 	return success;
 }
 
