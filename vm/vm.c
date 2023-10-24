@@ -357,66 +357,53 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED)
 {
-	// : 보조 페이지 테이블을 src에서 dst로 복사합니다.
-	// : src의 각 페이지를 순회하고 dst에 해당 entry의 사본을 만듭니다.
-	// : uninit page를 할당하고 그것을 즉시 claim해야 합니다.
-	// src로부터 dst보조테이블을 복사한다.
-	struct hash_iterator i;
 
+	struct hash_iterator i;
 	hash_first(&i, &src->spt_hash);
+
 	while (hash_next(&i))
 	{
-		struct page *p = hash_entry(hash_cur(&i), struct page, hash_elem);
-		enum vm_type type = p->operations->type;
-		void *upage = p->va;
-		bool writable = p->writable;
-
-		// malloc을 한 뒤에 넘겨야 한다.
-		//  uninit 타입인 경우는 aux 복사, 나머지 타입인 경우에는.. 생각을 해봐라 모르겠는데? 알려줘 답주세요 답답답 dap
-		//  최종 진화 타입여부에 따라타입을 나눠서 어떤것을 복제 떠야 하는지 생각해봐라.
-
-		// bool (*page_initializer)(struct page *, enum vm_type, void *);
+		struct page *src_page = hash_entry(hash_cur(&i), struct page, hash_elem);
+		enum vm_type type = src_page->operations->type;
+		void *upage = src_page->va;
+		bool writable = src_page->writable;
+		// 1.  type == uninit
 		if (type == VM_UNINIT)
-		// 부모 페이지가 초기화가 안된경우,
 		{
-			vm_alloc_page_with_initializer(VM_ANON, upage, writable, p->uninit.init, p->uninit.aux);
-			// 왜요 ? 부모가 초기화가 안된 상태, 초기화를 해주고 다시 continue 해서 반복문 돌고, 다시 부모정보를 받아와서
-			//  밑에서 초기화가 된 상태로 else 를 지나서 자식에게 복사가 된다.
-			// 다시 위로 올라감.
+			vm_initializer *init = src_page->uninit.init;
+			void *aux = src_page->uninit.aux;
+			vm_alloc_page_with_initializer(VM_ANON, upage, writable, init, aux);
 			continue;
 		}
-
+		// 2. type == file_backed
 		if (type == VM_FILE)
 		{
-			struct lazy_load_arg *lazy_load_arg = malloc(sizeof(struct lazy_load_arg));
-			lazy_load_arg->file = p->file.file;
-			lazy_load_arg->ofs = p->file.ofs;
-			lazy_load_arg->read_bytes = p->file.read_bytes;
-			if (!vm_alloc_page_with_initializer(type, upage, writable, NULL, lazy_load_arg))
-			{
+			struct lazy_load_arg *file_aux = malloc(sizeof(struct lazy_load_arg));
+			file_aux->file = src_page->file.file;
+			file_aux->ofs = src_page->file.ofs;
+			file_aux->read_bytes = src_page->file.read_bytes;
+			if (!vm_alloc_page_with_initializer(type, upage, writable, NULL, file_aux))
 				return false;
-			}
 			struct page *file_page = spt_find_page(dst, upage);
 			file_backed_initializer(file_page, type, NULL);
-			pml4_set_page(thread_current()->pml4, file_page->va, p->frame->kva, p->writable);
+			pml4_set_page(thread_current()->pml4, file_page->va, src_page->frame->kva, src_page->writable);
 			continue;
 		}
+		// 3. type == anon
+		if (!vm_alloc_page(type, upage, writable)) // uninit page 생성 & 초기화
+			return false;						   // init이랑 aux는 Lazy Loading에 필요. 지금 만드는 페이지는 기다리지 않고 바로 내용을 넣어줄 것이므로 필요 없음
 
-		// 부모의 페이지가 초기화가 된 경우,
-		//  자식의 페이지를 생성.
-
-		if (!vm_alloc_page(type, upage, writable))
-			return false;
-
+		// vm_claim_page로 요청한 후 매핑 + 페이지 타입에 맞게 초기화
 		if (!vm_claim_page(upage))
-			// 자식페이지를 물리주소랑 맵핑.
+		{
 			return false;
-		struct page *child_page = spt_find_page(dst, upage); // dst 보조테이블에서 현재 복사할 가상주소 upage에 해당하는 자식페이지를 찾음
-		memcpy(child_page->frame->kva, p->frame->kva, PGSIZE);
+		}
+
+		struct page *dst_page = spt_find_page(dst, upage);
+		memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
 	}
 	return true;
 }
-
 void hash_page_destroy(struct hash_elem *e, void *aux)
 {
 	struct page *page = hash_entry(e, struct page, hash_elem);
