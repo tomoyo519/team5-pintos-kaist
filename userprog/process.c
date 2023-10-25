@@ -27,7 +27,7 @@ static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
-
+struct lock filesys_lock;
 /* 후보 1 : argument passing 함수를 여기로 빼주기 */
 
 /* General process initializer for initd and other process. */
@@ -260,9 +260,13 @@ process_exec (void *f_name) { // 실험
 	process_cleanup ();
 
 	// memset(&_if, 0, sizeof _if); // Project 2 (argument passing 관련 변경) // 이거 삭제
-
+// #ifdef VM
+// 	supplemental_page_table_init(&thread_current()->spt);
+// #endif
+	// file_lock_acquire();
 	/* And then load the binary */
 	success = load (file_name, &_if); // Project 2 (argument passing 관련 변경)
+	// file_lock_release();
 
 	/* If load failed, quit. */
 	

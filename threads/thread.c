@@ -63,6 +63,8 @@ static struct lock tid_lock;
 /* Thread destruction requests */
 static struct list destruction_req;
 
+struct lock file_lock;
+
 /* Statistics. */
 static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
@@ -139,6 +141,8 @@ void thread_init(void)
 	list_init (&sleep_list); // alarm-multiple 관련 변경 // initialize sleep_list
 	next_tick_to_awake = INT64_MAX; // alarm-multiple 관련 변경 // initialize next_tick_to_awake
 
+	lock_init(&file_lock);
+	
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread();				  // running상태의 thread 구조체의 주소를 반환
 	init_thread(initial_thread, "main", PRI_DEFAULT); // 스레드를 초기화하고 초기 상태는 blocked 상태 -> running 상태로 바꿔줌
@@ -890,4 +894,12 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
+}
+
+void file_lock_acquire() {
+    lock_acquire(&file_lock);
+}
+
+void file_lock_release() {
+    lock_release(&file_lock);
 }

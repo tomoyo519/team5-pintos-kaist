@@ -68,7 +68,7 @@ file_backed_swap_out (struct page *page) {
 	off_t ofs = file_page->ofs;
 	
 	// dirty 한지 확인
-	if(pml4_is_dirty(curr_pml4, page->frame->kva)){
+	if(pml4_is_dirty(curr_pml4, page->va)){
 
 		file_write_at(file, page->frame->kva, read_bytes, ofs);
 		pml4_set_dirty(curr_pml4, page->va, 0);
@@ -87,6 +87,7 @@ static void
 file_backed_destroy (struct page *page) {
 	struct file_page *file_page = &page->file;
 	file_write_at(file_page->file, page->va, file_page->read_bytes, file_page->ofs);
+	// pml4_clear_page()
 }
 
 static bool
@@ -182,7 +183,6 @@ do_munmap (void *addr) {
 		if(page->frame){
 			palloc_free_page(page->frame->kva);
 		}
-		// palloc_free_page(page->frame->kva);
 		hash_delete(&curr->spt.hash, &page->h_elem);
 		addr += PGSIZE;
 		pg_cnt--;

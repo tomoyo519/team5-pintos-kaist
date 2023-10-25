@@ -51,7 +51,7 @@ void process_close_file(int fd);
 /* Project2-extra */
 const int STDIN = 1;
 const int STDOUT = 2;
-struct lock filesys_lock;
+// struct lock filesys_lock;
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -77,7 +77,7 @@ syscall_init (void) {
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 	/* LOCK INIT 추가*/
-	lock_init(&filesys_lock);
+	// lock_init(&filesys_lock);
 }
 
 /* helper functions letsgo ! */
@@ -215,8 +215,11 @@ void exit(int status){
 /* Clone current process. */
 tid_t fork (const char *thread_name){
 	/* create new process, which is the clone of current process with the name THREAD_NAME*/
+	// file_lock_acquire();
 	struct thread *curr = thread_current();
-	return process_fork(thread_name, &curr->parent_if);
+	tid_t result = process_fork(thread_name, &curr->parent_if);
+	// file_lock_release();
+	return result;
 	/* must return pid of the child process */
 }
 
@@ -244,8 +247,13 @@ int wait(tid_t pid){
 
  /* Create a file. */
 bool create(const char *file, unsigned initial_size){
+
 	check_address(file); // 포인터가 가리키는 주소가 유저영역의 주소인지 확인
-	return filesys_create(file, initial_size); // 파일 이름 & 크기에 해당하는 파일 생성
+	file_lock_acquire();
+	bool success = filesys_create(file, initial_size); // 파일 이름 & 크기에 해당하는 파일 생성
+
+	file_lock_release();
+	return success;
 }
 
  /* Delete a file. */
@@ -256,14 +264,22 @@ bool remove(const char *file){
 
 int open (const char *file){
 	check_address(file);
-	lock_acquire(&filesys_lock);
+	file_lock_acquire();
+
 	struct file *f = filesys_open(file); // 파일을 오픈
-	if (f == NULL)
+
+	if (f == NULL){
+		file_lock_release();
 		return -1;
+	}
+
 	int fd = process_add_file(f);
-	if (fd == -1)
+	if (fd == -1){
+		file_lock_release();
 		file_close(f);
-	lock_release(&filesys_lock);
+	}
+
+	file_lock_release();
 	return fd;
 }
 
@@ -277,7 +293,6 @@ int filesize (int fd){
 /* 수정완료 */
 int read (int fd, void *buffer, unsigned size){
 	check_address(buffer);
-	// printf(" @@@@ %x \n", buffer);
 	unsigned char *buf = buffer;
 	uint64_t *pte = pml4e_walk(thread_current()->pml4, buffer, 0);
 	if(*pte && !is_writable(pte)){
@@ -288,8 +303,12 @@ int read (int fd, void *buffer, unsigned size){
 
 	struct file *f = process_get_file(fd);
 
-	if (f == NULL) return -1;
-	if (f == STDOUT) return -1;
+	file_lock_acquire(); // 파일에 동시접근 일어날 수 있으므로 lock 사용
+	
+	if (f == NULL || f == STDOUT){
+		file_lock_release();
+		return -1;
+	}
 	if (f == STDIN){
 		if(curr->stdin_count == 0){
 			NOT_REACHED();
@@ -306,10 +325,9 @@ int read (int fd, void *buffer, unsigned size){
 		}
 	}
 	else{
-		lock_acquire(&filesys_lock); // 파일에 동시접근 일어날 수 있으므로 lock 사용
 		readsize = file_read(f, buffer, size);
-		lock_release(&filesys_lock);
 	}
+	file_lock_release();
 	return readsize;
 }
 
@@ -338,9 +356,9 @@ int write (int fd, const void *buffer, unsigned size){
 		}
 	}
 	else{
-		lock_acquire(&filesys_lock); // 파일에 동시접근 일어날 수 있으므로 lock 사용
+		file_lock_acquire(); // 파일에 동시접근 일어날 수 있으므로 lock 사용
 		writesize = file_write(f, buffer, size);
-		lock_release(&filesys_lock);
+		file_lock_release();
 	}
 	return writesize;
 }
@@ -359,11 +377,13 @@ unsigned tell (int fd){
 }
 
 void close (int fd){
-	
 	struct file *f = process_get_file(fd);
+	file_lock_acquire();
 
-	if(f == NULL)
+	if(f == NULL){
+		file_lock_release();
 		return;
+	}
 	struct thread *curr = thread_current();
 
 	if(fd==0 || f==STDIN)
@@ -374,6 +394,7 @@ void close (int fd){
 	process_close_file(fd);
 
 	if(fd <= 1 || f <= 2){
+		file_lock_release();
 		return;
 	}
 
@@ -383,6 +404,7 @@ void close (int fd){
 	else{
 		f->dup_count--;
 	}
+	file_lock_release();
 }
 
 /* Project 2 : Extra 관련 변경 */
